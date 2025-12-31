@@ -7,6 +7,8 @@ export type JournalType = 'reflective' | 'fitness' | 'gratitude' | 'legacy';
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'system';
   notificationsEnabled: boolean;
+  language: 'en' | 'es' | 'fr' | 'de';
+  defaultJournalId?: string;
 }
 export interface User {
   id: string;
@@ -75,4 +77,18 @@ export interface DailyContent {
   prompt: string;
   affirmation: string;
   targetJournalId?: string;
+}
+export interface LegacyShare {
+  id: string;
+  journalId: string;
+  userId: string;
+  recipientEmail: string;
+  expiresAt?: string;
+  accessKey: string;
+  createdAt: string;
+}
+export interface LegacyPublicData {
+  journalTitle: string;
+  authorName: string;
+  entries: Entry[];
 }

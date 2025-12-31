@@ -96,18 +96,38 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const payload = c.get('jwtPayload');
     const entries = await EntryEntity.listByUser(c.env, payload.userId);
     const sortedEntries = [...entries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
     const frequency: Record<string, number> = { Sun:0, Mon:0, Tue:0, Wed:0, Thu:0, Fri:0, Sat:0 };
     sortedEntries.forEach(e => {
       const day = format(new Date(e.date), 'eee');
       if (frequency[day] !== undefined) frequency[day]++;
     });
+
     const moodTrends = sortedEntries.slice(-14).map(e => ({
       date: format(new Date(e.date), 'MM-dd'),
       score: Number(e.structuredData?.mood_score || e.structuredData?.intensity || 3)
     }));
-    const topTopics = sortedEntries.length > 5
-      ? [{ text: 'Growth', value: 85 }, { text: 'Mindfulness', value: 65 }, { text: 'Routine', value: 45 }]
-      : [{ text: 'Discovery', value: 100 }];
+
+    // Extract topics from tags
+    const tagMap: Record<string, number> = {};
+    entries.slice(-50).forEach(e => {
+      e.tags?.forEach(tag => {
+        tagMap[tag] = (tagMap[tag] || 0) + 1;
+      });
+    });
+
+    const topTopics = Object.entries(tagMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([text, count]) => ({
+        text,
+        value: Math.round((count / Math.max(1, entries.length)) * 100)
+      }));
+
+    if (topTopics.length === 0) {
+      topTopics.push({ text: 'Discovery', value: 100 });
+    }
+
     return ok(c, {
       moodTrends,
       writingFrequency: Object.entries(frequency).map(([day, count]) => ({ day, count })),
@@ -153,5 +173,36 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       timestamp: new Date().toISOString()
     };
     return ok(c, assistantMsg);
+  });
+
+  app.put('/api/auth/settings', async (c) => {
+    const payload = c.get('jwtPayload');
+    const body = await c.req.json();
+    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
+    if (!userAuth) return notFound(c);
+    
+    const updatedProfile = { ...userAuth.profile, preferences: { ...userAuth.profile.preferences, ...body } };
+    await new UserAuthEntity(c.env, payload.email).patch({ profile: updatedProfile });
+    return ok(c, updatedProfile);
+  });
+
+  app.post('/api/legacy/generate-link', async (c) => {
+    const payload = c.get('jwtPayload');
+    const { journalId, recipientEmail } = await c.req.json();
+    const shareId = crypto.randomUUID();
+    const accessKey = Math.random().toString(36).slice(-8);
+    // In a real app, you'd create a LegacyShareEntity here. 
+    // For Phase 11 MVP, we return the generated data to simulate the persistence.
+    return ok(c, { id: shareId, journalId, accessKey, recipientEmail });
+  });
+
+  app.get('/api/public/legacy/:shareId', async (c) => {
+    // Simplified public endpoint simulation
+    // Real logic would fetch journal and entries based on the share record
+    return ok(c, {
+      journalTitle: "Shared Legacy Journal",
+      authorName: "Lumina User",
+      entries: []
+    });
   });
 }

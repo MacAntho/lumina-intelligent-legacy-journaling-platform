@@ -30,6 +30,7 @@ export function AppSidebar(): JSX.Element {
   const journals = useAppStore(s => s.journals);
   const user = useAppStore(s => s.user);
   const logout = useAppStore(s => s.logout);
+  const isSaving = useAppStore(s => s.isSaving);
   const location = useLocation();
   const navigate = useNavigate();
   const handleLogout = () => {
@@ -139,9 +140,15 @@ export function AppSidebar(): JSX.Element {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild className="text-stone-500">
-              <a href="#"><Settings className="size-4" /> <span>Settings</span></a>
+            <SidebarMenuButton asChild isActive={location.pathname === "/settings"} className="text-stone-500">
+              <Link to="/settings"><Settings className="size-4" /> <span>Settings</span></Link>
             </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem className="px-2 pt-2">
+            <div className="flex items-center gap-2 text-[10px] text-stone-400 font-serif italic">
+              <div className={cn("h-1.5 w-1.5 rounded-full", isSaving ? "bg-amber-400 animate-pulse" : "bg-emerald-400")} />
+              {isSaving ? "Syncing archive..." : "Safe: All changes persisted"}
+            </div>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
