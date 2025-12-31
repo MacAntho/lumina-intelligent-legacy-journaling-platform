@@ -4,11 +4,15 @@ import { useAppStore } from '@/lib/store';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Calendar, TrendingUp, Trash2, Loader2, Library, Check, ChevronRight, Book, Sparkles, RefreshCw, ArrowRight, Flame, History, ShieldCheck } from 'lucide-react';
+import { 
+  Plus, Calendar, TrendingUp, Trash2, Loader2, Check, 
+  ChevronRight, Book, Sparkles, RefreshCw, ArrowRight, 
+  Flame, History, ShieldCheck 
+} from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format, differenceInDays, isSameDay, subDays, startOfDay } from 'date-fns';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -98,7 +102,7 @@ export function Dashboard() {
   const currentTier = user?.preferences?.tier || 'free';
   return (
     <AppLayout container>
-      <div className="space-y-12 max-w-7xl mx-auto">
+      <div className="space-y-12 max-w-7xl mx-auto" role="main">
         <header className="flex flex-col md:flex-row md:items-start justify-between gap-6">
           <div className="space-y-1">
             <h1 className="text-4xl md:text-5xl font-serif font-medium text-stone-900 dark:text-stone-50 tracking-tight">
@@ -107,7 +111,10 @@ export function Dashboard() {
             <div className="flex items-center gap-4">
               <p className="text-stone-500 font-light italic">Your reflections are waiting for you.</p>
               {streak > 0 && (
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-bold border border-amber-100">
+                <div 
+                  className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-bold border border-amber-100"
+                  aria-label={`${streak} day writing streak`}
+                >
                   <Flame size={14} className="fill-current" /> {streak} Day Streak
                 </div>
               )}
@@ -123,7 +130,12 @@ export function Dashboard() {
           </div>
           <div className="flex gap-3">
             <Dialog open={isCreateOpen} onOpenChange={(o) => { setIsCreateOpen(o); if(!o) setStep('template'); }}>
-              <Button id="tour-new-journal" onClick={handleOpenCreate} className="rounded-full bg-stone-900 hover:bg-stone-800 text-white px-6 gap-2 transition-all hover:scale-105 shadow-xl shadow-stone-200">
+              <Button 
+                id="tour-new-journal" 
+                onClick={handleOpenCreate} 
+                className="rounded-full bg-stone-900 hover:bg-stone-800 text-white px-8 py-6 h-12 gap-2 transition-all hover:scale-105 shadow-xl shadow-stone-200"
+                aria-label="Create new journal archive"
+              >
                 <Plus size={18} /> New Journal
               </Button>
               <DialogContent className="rounded-3xl sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
@@ -138,7 +150,11 @@ export function Dashboard() {
                         {JOURNAL_TEMPLATES.map((t) => {
                           const IconComponent = (LucideIcons as any)[t.icon] || Book;
                           return (
-                            <button key={t.id} onClick={() => selectTemplate(t)} className={cn("flex flex-col items-start p-4 rounded-2xl border text-left transition-all hover:border-stone-400 group relative", selectedTemplate.id === t.id ? "border-stone-900 bg-stone-50" : "border-stone-100")}>
+                            <button 
+                              key={t.id} 
+                              onClick={() => selectTemplate(t)} 
+                              className={cn("flex flex-col items-start p-6 rounded-2xl border text-left transition-all hover:border-stone-400 focus-visible:ring-2 focus-visible:ring-stone-900 group relative", selectedTemplate.id === t.id ? "border-stone-900 bg-stone-50" : "border-stone-100")}
+                            >
                               <div className={cn("p-2 rounded-xl mb-3 text-white", `bg-${t.color}-500`)}>
                                 <IconComponent size={20} />
                               </div>
@@ -152,18 +168,18 @@ export function Dashboard() {
                   ) : (
                     <motion.div key="config-step" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
                       <DialogHeader>
-                        <button onClick={() => setStep('template')} className="text-stone-400 hover:text-stone-900 flex items-center gap-1 text-xs mb-2 transition-colors"><ChevronRight className="rotate-180" size={14} /> Back to Templates</button>
+                        <button onClick={() => setStep('template')} className="text-stone-400 hover:text-stone-900 flex items-center gap-1 text-xs mb-2 transition-colors focus-visible:ring-1 focus-visible:ring-stone-900"><ChevronRight className="rotate-180" size={14} /> Back to Templates</button>
                         <DialogTitle className="text-2xl font-serif">Refine Your Journal</DialogTitle>
                         <DialogDescription>Give your new sanctuary a personal touch.</DialogDescription>
                       </DialogHeader>
                       <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
-                          <Label>Title</Label>
-                          <Input value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} className="rounded-xl h-12" />
+                          <Label htmlFor="journal-title">Title</Label>
+                          <Input id="journal-title" value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} className="rounded-xl h-12" />
                         </div>
                         <div className="grid gap-2">
-                          <Label>Description</Label>
-                          <Input value={customDesc} onChange={(e) => setCustomDesc(e.target.value)} className="rounded-xl h-12" />
+                          <Label htmlFor="journal-desc">Description</Label>
+                          <Input id="journal-desc" value={customDesc} onChange={(e) => setCustomDesc(e.target.value)} className="rounded-xl h-12" />
                         </div>
                       </div>
                       <DialogFooter>
@@ -178,10 +194,10 @@ export function Dashboard() {
             </Dialog>
           </div>
         </header>
-        <section id="tour-search-bar" className="bg-stone-50/50 rounded-4xl p-1 border border-stone-100 shadow-inner">
+        <section id="tour-search-bar" className="bg-stone-50/50 rounded-4xl p-1 border border-stone-100 shadow-inner" aria-label="Global Archive Search">
           <AdvancedSearch items={journals} onResults={onSearchResults} searchFields={['title', 'description']} context="global" />
         </section>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8" role="region" aria-label="Daily Guidance and Wisdom">
           <motion.div id="tour-daily-guidance" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="h-full min-h-[300px] rounded-4xl border-none bg-stone-900 text-white shadow-2xl relative overflow-hidden p-10">
               <div className="relative z-10 flex flex-col h-full justify-between gap-8">
@@ -193,7 +209,7 @@ export function Dashboard() {
                     </div>
                     <Sheet>
                       <SheetTrigger asChild>
-                        <Button variant="ghost" size="icon" className="text-white/40 hover:text-white">
+                        <Button variant="ghost" size="icon" className="text-white/40 hover:text-white focus-visible:ring-1 focus-visible:ring-white">
                           <History size={18} />
                         </Button>
                       </SheetTrigger>
@@ -219,7 +235,7 @@ export function Dashboard() {
                       <div className="h-8 bg-white/10 rounded-lg w-1/2" />
                     </div>
                   ) : (
-                    <h2 className="text-3xl md:text-4xl font-serif leading-tight tracking-tight">
+                    <h2 className="text-3xl md:text-4xl font-serif leading-tight tracking-tight" aria-live="polite">
                       {dailyContent?.prompt || "How did you find stillness in the chaos today?"}
                     </h2>
                   )}
@@ -227,7 +243,7 @@ export function Dashboard() {
                 <div className="flex items-center justify-between">
                   <Button
                     onClick={() => dailyContent?.targetJournalId && navigate(`/journal/${dailyContent.targetJournalId}`)}
-                    className="rounded-full bg-white text-stone-900 hover:bg-stone-100 px-8 h-12 font-medium"
+                    className="rounded-full bg-white text-stone-900 hover:bg-stone-100 px-8 h-12 font-medium focus-visible:ring-2 focus-visible:ring-amber-400"
                   >
                     Start Writing <ArrowRight size={18} className="ml-2" />
                   </Button>
@@ -240,80 +256,87 @@ export function Dashboard() {
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <Card className="h-full rounded-4xl border-stone-100 shadow-sm p-10 bg-white flex flex-col justify-center text-center">
-              <div className="text-stone-400 italic font-serif text-2xl leading-relaxed px-6">
+              <div className="text-stone-400 italic font-serif text-2xl leading-relaxed px-6" aria-live="polite">
                 "{dailyContent?.affirmation || "I am the architect of my own growth."}"
               </div>
             </Card>
           </motion.div>
         </div>
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[1, 2, 3].map(i => <div key={i} className="h-64 rounded-4xl bg-stone-100 animate-pulse" />)}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            <Card className="lg:col-span-1 rounded-4xl border-stone-100 shadow-sm bg-stone-50/50 flex flex-col p-8">
-              <CardTitle className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.3em] flex items-center gap-2 mb-8">
-                <TrendingUp size={14} /> Global Status
-              </CardTitle>
-              <div className="text-6xl font-serif font-medium text-stone-900">{journals.length}</div>
-              <p className="text-sm text-stone-500 mt-2 font-light">Active Archives</p>
-            </Card>
-            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8">
-              {filteredJournals.length === 0 ? (
-                <div className="md:col-span-2 py-32 border-2 border-dashed border-stone-200 rounded-4xl text-center flex flex-col items-center">
-                  <h3 className="text-2xl font-serif">No archives found.</h3>
-                </div>
-              ) : (
-                filteredJournals.map((journal) => {
-                  const template = JOURNAL_TEMPLATES.find(t => t.id === journal.templateId) || JOURNAL_TEMPLATES[0];
-                  const IconComponent = (LucideIcons as any)[template.icon] || Book;
-                  return (
-                    <div key={journal.id} className="relative group h-full">
-                      <Link to={`/journal/${journal.id}`} className="block h-full">
-                        <Card className="h-full rounded-4xl border-stone-100 shadow-sm hover:shadow-xl hover:border-stone-300 transition-all duration-500 bg-white p-8">
-                          <div className="flex justify-between items-start mb-4">
-                            <div className={cn("p-3 rounded-2xl text-white", `bg-${template.color}-500`)}>
-                              <IconComponent size={24} />
-                            </div>
-                            <Badge variant="outline" className="text-[8px] font-bold uppercase tracking-[0.2em]">
-                              {template.name}
-                            </Badge>
-                          </div>
-                          <CardTitle className="text-2xl font-serif text-stone-900 mb-2">{journal.title}</CardTitle>
-                          <CardDescription className="line-clamp-2 text-stone-500 font-light">{journal.description}</CardDescription>
-                          <div className="mt-6 pt-6 border-t border-stone-50 flex items-center gap-2 text-xs text-stone-400">
-                             <Calendar size={14} />
-                             <span>Last active: {journal.lastEntryAt ? format(new Date(journal.lastEntryAt), 'MMM dd, yyyy') : 'Never'}</span>
-                          </div>
-                        </Card>
-                      </Link>
-                      <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-white shadow-lg text-stone-300 hover:text-red-500">
-                              <Trash2 size={18} />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent className="rounded-4xl border-rose-100">
-                            <AlertDialogHeader>
-                              <AlertDialogTitle className="font-serif text-2xl">Delete Archive?</AlertDialogTitle>
-                              <AlertDialogDescription>This will permanently erase "{journal.title}" from the Edge.</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel className="rounded-xl">Retain</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteJournal(journal.id)} className="bg-red-500 text-white rounded-xl hover:bg-red-600">Delete</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+        <section id="journals-grid" role="region" aria-label="Your Journal Archives">
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {[1, 2, 3].map(i => <div key={i} className="h-64 rounded-4xl bg-stone-100 animate-pulse" />)}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+              <Card className="lg:col-span-1 rounded-4xl border-stone-100 shadow-sm bg-stone-50/50 flex flex-col p-8">
+                <CardTitle className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.3em] flex items-center gap-2 mb-8">
+                  <TrendingUp size={14} /> Global Status
+                </CardTitle>
+                <div className="text-6xl font-serif font-medium text-stone-900" aria-live="polite">{journals.length}</div>
+                <p className="text-sm text-stone-500 mt-2 font-light">Active Archives</p>
+              </Card>
+              <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8">
+                {filteredJournals.length === 0 ? (
+                  <div className="md:col-span-2 py-32 border-2 border-dashed border-stone-200 rounded-4xl text-center flex flex-col items-center">
+                    <h3 className="text-2xl font-serif">No archives found.</h3>
+                  </div>
+                ) : (
+                  filteredJournals.map((journal) => {
+                    const template = JOURNAL_TEMPLATES.find(t => t.id === journal.templateId) || JOURNAL_TEMPLATES[0];
+                    const IconComponent = (LucideIcons as any)[template.icon] || Book;
+                    return (
+                      <div key={journal.id} className="relative group h-full">
+                        <Link to={`/journal/${journal.id}`} className="block h-full focus-visible:ring-2 focus-visible:ring-stone-900 rounded-4xl outline-none">
+                          <Card className="h-full rounded-4xl border-stone-100 shadow-sm hover:shadow-xl hover:border-stone-300 transition-all duration-500 bg-white p-8">
+                            <div className="flex justify-between items-start mb-4">
+                              <div className={cn("p-3 rounded-2xl text-white", `bg-${template.color}-500`)}>
+                                <IconComponent size={24} />
+                              </div>
+                              <Badge variant="outline" className="text-[8px] font-bold uppercase tracking-[0.2em]">
+                                {template.name}
+                              </Badge>
+                            </div>
+                            <CardTitle className="text-2xl font-serif text-stone-900 mb-2">{journal.title}</CardTitle>
+                            <CardDescription className="line-clamp-2 text-stone-500 font-light">{journal.description}</CardDescription>
+                            <div className="mt-6 pt-6 border-t border-stone-50 flex items-center gap-2 text-xs text-stone-400">
+                               <Calendar size={14} />
+                               <span>Last active: {journal.lastEntryAt ? format(new Date(journal.lastEntryAt), 'MMM dd, yyyy') : 'Never'}</span>
+                            </div>
+                          </Card>
+                        </Link>
+                        <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-12 w-12 rounded-full bg-white shadow-lg text-stone-300 hover:text-red-500"
+                                aria-label={`Delete ${journal.title} archive`}
+                              >
+                                <Trash2 size={20} />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="rounded-4xl border-rose-100">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className="font-serif text-2xl">Delete Archive?</AlertDialogTitle>
+                                <AlertDialogDescription>This will permanently erase "{journal.title}" from the Edge.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel className="rounded-xl">Retain</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteJournal(journal.id)} className="bg-red-500 text-white rounded-xl hover:bg-red-600">Delete</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </section>
       </div>
       <UpgradeModal open={upgradeModalOpen} onOpenChange={setUpgradeModalOpen} title="Expand Your Horizon" description="You've reached the limit of free sanctuaries. Upgrade to Premium for unlimited growth." />
     </AppLayout>

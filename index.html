@@ -1,30 +1,35 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="light">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React + TS</title>
+    <link rel="icon" type="image/svg+xml" href="/sparkles.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#FDFCFB" />
+    <!-- Primary Meta Tags -->
+    <title>Lumina — Intelligent Legacy Journaling</title>
+    <meta name="title" content="Lumina — Intelligent Legacy Journaling" />
+    <meta name="description" content="A minimalist sanctuary for your thoughts, enhanced by AI to uncover patterns in your growth and preserve your digital legacy." />
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://lumina.io/" />
+    <meta property="og:title" content="Lumina — Intelligent Legacy Journaling" />
+    <meta property="og:description" content="A minimalist sanctuary for your thoughts, enhanced by AI to uncover patterns in your growth and preserve your digital legacy." />
+    <meta property="og:image" content="/sparkles.png" />
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://lumina.io/" />
+    <meta property="twitter:title" content="Lumina — Intelligent Legacy Journaling" />
+    <meta property="twitter:description" content="A minimalist sanctuary for your thoughts, enhanced by AI to uncover patterns in your growth and preserve your digital legacy." />
+    <meta property="twitter:image" content="/sparkles.png" />
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/sparkles.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
   </head>
-  <body>
+  <body class="bg-[#FDFCFB] selection:bg-amber-100 selection:text-stone-900">
     <div id="root"></div>
-    <script>
-        window.addEventListener('error', (event) => {
-          const isOurAppError = event.filename && event.filename.startsWith(window.location.origin);
-          if (isOurAppError) {
-            navigator.sendBeacon('/api/client-errors', JSON.stringify({
-              message: event.message,
-              url: window.location.href,
-              userAgent: navigator.userAgent,
-              source: event.filename,
-              lineno: event.lineno,
-              colno: event.colno,
-              stack: event.error ? event.error.stack : null,
-              timestamp: new Date().toISOString()
-            }));
-          }
-        }, true);
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

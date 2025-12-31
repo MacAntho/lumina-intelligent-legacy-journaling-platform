@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { jwt, sign } from "hono/jwt";
-import { isSameDay } from "date-fns";
 import type { Env } from './core-utils';
 import {
   UserAuthEntity, JournalEntity, EntryEntity,
@@ -10,10 +9,16 @@ import {
   AiInsightEntity, SecurityLogEntity, UsageEntity
 } from "./entities";
 import { chatWithAssistant, analyzeJournalPatterns } from "./intelligence";
-import { ok, bad, notFound, isStr } from './core-utils';
-import type { LoginRequest, RegisterRequest, DailyContent, User, AnalysisRange, SubscriptionTier, ExportOptions, LegacyAuditLog } from "@shared/types";
+import { ok, bad, notFound } from './core-utils';
+import type { 
+  LoginRequest, RegisterRequest, User, AnalysisRange, 
+  ExportOptions, LegacyAuditLog 
+} from "@shared/types";
 import { generateServerPdf } from "./pdf-service";
 const JWT_SECRET = "lumina-secret-key-change-this";
+/**
+ * Hashes passwords using PBKDF2 for secure storage.
+ */
 async function hashPassword(password: string, salt: string) {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits", "deriveKey"]);
@@ -26,8 +31,14 @@ const LIMITS = {
   premium: { journals: 1000, entriesPerMonth: 10000 },
   pro: { journals: 10000, entriesPerMonth: 100000 }
 };
+/**
+ * Registers user routes on the Hono application.
+ */
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   // --- PUBLIC ROUTES (No JWT required) ---
+  /**
+   * Fetches shared legacy archive metadata if valid access key is provided.
+   */
   app.get('/api/public/legacy/:shareId', async (c) => {
     const shareId = c.req.param('shareId');
     const key = c.req.query('key');
@@ -50,26 +61,31 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     };
     return ok(c, data);
   });
+  /**
+   * Verifies password for a protected legacy archive.
+   */
   app.post('/api/public/legacy/:shareId/verify', async (c) => {
     const shareId = c.req.param('shareId');
     const { password } = await c.req.json();
     const inst = new LegacyShareEntity(c.env, shareId);
     if (!(await inst.exists())) return notFound(c);
     const share = await inst.getState();
-    // In a real app, use the same hashPassword logic
-    const inputHash = await hashPassword(password, "static-legacy-salt"); 
+    const inputHash = await hashPassword(password, "static-legacy-salt");
     if (share.passwordHash !== inputHash) return bad(c, 'Incorrect password');
     const entries = await EntryEntity.listByJournal(c.env, share.journalId, "public");
     return ok(c, { entries });
   });
+  /**
+   * Dispatches password recovery instructions.
+   */
   app.post('/api/auth/forgot', async (c) => {
     const { email } = await c.req.json();
     return ok(c, { message: "Recovery dispatched if account exists.", debugToken: "LMN-123-RECOVERY" });
   });
-  app.post('/api/auth/reset', async (c) => {
-    return ok(c, { message: "Security barrier updated." });
-  });
   // --- AUTH PROTECTED ROUTES ---
+  /**
+   * Registers a new user.
+   */
   app.post('/api/auth/register', async (c) => {
     const body = await c.req.json<RegisterRequest>();
     if (!body.email || !body.password || !body.name) return bad(c, 'Missing fields');
@@ -112,6 +128,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const token = await sign({ userId, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
     return ok(c, { user: userAuth.profile, token });
   });
+  /**
+   * Authenticates a user and returns a session token.
+   */
   app.post('/api/auth/login', async (c) => {
     const body = await c.req.json<LoginRequest>();
     const userAuth = await UserAuthEntity.findByEmail(c.env, body.email);
@@ -126,6 +145,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   // JWT Middleware for everything else
   app.use('/api/*', jwt({ secret: JWT_SECRET }));
+  /**
+   * Fetches the current authenticated user's profile and usage.
+   */
   app.get('/api/auth/me', async (c) => {
     const payload = c.get('jwtPayload');
     const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
@@ -133,6 +155,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const usage = await UsageEntity.getAndReset(c.env, userAuth.profile.id);
     return ok(c, { ...userAuth.profile, usage });
   });
+  /**
+   * Updates user preferences.
+   */
   app.put('/api/auth/settings', async (c) => {
     const payload = c.get('jwtPayload');
     const updates = await c.req.json();
@@ -142,114 +167,45 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     await new UserAuthEntity(c.env, payload.email).patch({ profile: updated });
     return ok(c, updated);
   });
+  /**
+   * Permanently deletes user account and all associated data.
+   */
   app.delete('/api/auth/me', async (c) => {
     const payload = c.get('jwtPayload');
     await UserAuthEntity.purgeAllUserData(c.env, payload.userId, payload.email);
     return ok(c, { message: "Sanctuary purged." });
   });
-  // Journals & Entries
+  /**
+   * Lists all journals for the current user.
+   */
   app.get('/api/journals', async (c) => {
     const payload = c.get('jwtPayload');
     return ok(c, await JournalEntity.listByUser(c.env, payload.userId));
   });
-  app.post('/api/journals', async (c) => {
-    const payload = c.get('jwtPayload');
-    const body = await c.req.json();
-    const usage = await UsageEntity.getAndReset(c.env, payload.userId);
-    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
-    const tier = userAuth?.profile.preferences.tier || 'free';
-    if (usage.journalCount >= LIMITS[tier].journals) return bad(c, 'Limit reached');
-    const journal = await JournalEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: payload.userId, ...body, createdAt: new Date().toISOString()
-    });
-    await new UsageEntity(c.env, payload.userId).patch({ journalCount: usage.journalCount + 1 });
-    return ok(c, journal);
-  });
-  app.delete('/api/journals/:id', async (c) => {
-    const id = c.req.param('id');
-    await JournalEntity.delete(c.env, id);
-    return ok(c, true);
-  });
-  app.post('/api/journals/:id/entries', async (c) => {
-    const payload = c.get('jwtPayload');
-    const body = await c.req.json();
-    const usage = await UsageEntity.getAndReset(c.env, payload.userId);
-    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
-    const tier = userAuth?.profile.preferences.tier || 'free';
-    if (usage.monthlyEntryCount >= LIMITS[tier].entriesPerMonth) return bad(c, 'Monthly limit reached');
-    const entry = await EntryEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: payload.userId, journalId: c.req.param('id'),
-      ...body, date: new Date().toISOString()
-    });
-    await new UsageEntity(c.env, payload.userId).patch({ monthlyEntryCount: usage.monthlyEntryCount + 1 });
-    return ok(c, entry);
-  });
+  /**
+   * Lists all entries for the current user.
+   */
   app.get('/api/entries/all', async (c) => {
     const payload = c.get('jwtPayload');
     return ok(c, await EntryEntity.listByUser(c.env, payload.userId));
   });
-  // AI & Insights
-  app.post('/api/ai/chat', async (c) => {
+  /**
+   * Fetches the export history for the current user.
+   */
+  app.get('/api/exports', async (c) => {
     const payload = c.get('jwtPayload');
-    const { message, history } = await c.req.json();
-    const entries = await EntryEntity.listByUser(c.env, payload.userId);
-    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
-    const response = await chatWithAssistant(userAuth?.profile.name || "Explorer", message, history, entries);
-    return ok(c, response);
+    return ok(c, await ExportLogEntity.listByUser(c.env, payload.userId));
   });
-  app.get('/api/ai/insights/patterns', async (c) => {
+  /**
+   * Fetches the legacy audit logs for the current user.
+   */
+  app.get('/api/legacy/audit', async (c) => {
     const payload = c.get('jwtPayload');
-    const journalId = c.req.query('journalId');
-    const range = (c.req.query('range') || 'week') as AnalysisRange;
-    const entries = await EntryEntity.listByJournal(c.env, journalId || "", payload.userId);
-    const journal = await new JournalEntity(c.env, journalId || "").getState();
-    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
-    const insightData = await analyzeJournalPatterns(userAuth?.profile.name || "Explorer", journal.title, entries, range);
-    const insight = await AiInsightEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: payload.userId, journalId: journalId || "",
-      range, createdAt: new Date().toISOString(), ...insightData
-    });
-    return ok(c, insight);
+    return ok(c, await LegacyAuditLogEntity.listByUser(c.env, payload.userId));
   });
-  app.get('/api/ai/insights/history', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await AiInsightEntity.listByUser(c.env, payload.userId));
-  });
-  app.get('/api/ai/daily', async (c) => {
-    return ok(c, { prompt: "How did you find stillness today?", affirmation: "I am the architect of my own growth." });
-  });
-  // Notifications & Activity
-  app.get('/api/notifications', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await NotificationEntity.listByUser(c.env, payload.userId));
-  });
-  app.patch('/api/notifications/:id/read', async (c) => {
-    await new NotificationEntity(c.env, c.req.param('id')).patch({ isRead: true });
-    return ok(c, true);
-  });
-  app.post('/api/notifications/read-all', async (c) => {
-    const payload = c.get('jwtPayload');
-    await NotificationEntity.markAllAsRead(c.env, payload.userId);
-    return ok(c, true);
-  });
-  // Search & Suggestions
-  app.get('/api/searches', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await SavedSearchEntity.listByUser(c.env, payload.userId));
-  });
-  app.post('/api/searches', async (c) => {
-    const payload = c.get('jwtPayload');
-    const body = await c.req.json();
-    const search = await SavedSearchEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: payload.userId, ...body, createdAt: new Date().toISOString()
-    });
-    return ok(c, search);
-  });
-  app.get('/api/search/suggestions', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await EntryEntity.getSuggestions(c.env, payload.userId));
-  });
-  // Exports
+  /**
+   * Generates a PDF export for a specific journal.
+   */
   app.get('/api/export/pdf', async (c) => {
     const payload = c.get('jwtPayload');
     const journalId = c.req.query('journalId') || "";
@@ -264,6 +220,16 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const journal = await new JournalEntity(c.env, journalId).getState();
     const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
     const pdfBytes = await generateServerPdf(journal, entries, options);
+    // Log the export event
+    await ExportLogEntity.create(c.env, {
+      id: crypto.randomUUID(),
+      userId: payload.userId,
+      journalId,
+      timestamp: new Date().toISOString(),
+      format: 'pdf',
+      status: 'success',
+      options
+    });
     return new Response(pdfBytes, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="archive.pdf"' } });
   });
 }

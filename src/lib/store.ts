@@ -5,11 +5,9 @@ import type {
   Journal, Entry, User, LegacyContact, InsightData, SavedSearch, AiInsight,
   LoginRequest, RegisterRequest, AuthResponse, AiMessage,
   DailyContent, ExportLog, LegacyAuditLog, AppNotification,
-  SubscriptionTier
+  SubscriptionTier, ExportOptions
 } from '@shared/types';
-import { encryptContent, decryptContent } from './crypto';
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
-let sessionKey: string | null = null;
 interface AppState {
   user: User | null;
   token: string | null;
@@ -64,7 +62,7 @@ interface AppState {
   fetchPromptHistory: () => Promise<void>;
   generateContextualPrompt: (journalId: string, templateId: string) => Promise<DailyContent>;
   logExport: (log: Partial<ExportLog>) => Promise<void>;
-  exportJournalPdf: (journalId: string, options: any) => Promise<void>;
+  exportJournalPdf: (journalId: string, options: ExportOptions) => Promise<void>;
   fetchExportHistory: () => Promise<void>;
   sendAiMessage: (content: string) => Promise<void>;
   clearChatHistory: () => void;
@@ -129,6 +127,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (heartbeatInterval) clearInterval(heartbeatInterval);
       heartbeatInterval = setInterval(() => get().heartbeat(), 300000);
     } catch (error) {
+      console.error('Initialization failed:', error);
       get().logout();
       set({ isLoading: false, isInitialized: false });
     }
@@ -143,8 +142,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       pro: { j: 10000, e: 100000 }
     };
     const currentLimits = limits[tier] || limits.free;
-    if (type === 'journal') return (user.usage.journalCount || 0) >= currentLimits.j;
-    return (user.usage.monthlyEntryCount || 0) >= currentLimits.e;
+    const reached = type === 'journal' 
+      ? (user.usage.journalCount || 0) >= currentLimits.j
+      : (user.usage.monthlyEntryCount || 0) >= currentLimits.e;
+    if (reached) {
+      console.warn(`Tier limit reached for ${type}. Current: ${type === 'journal' ? user.usage.journalCount : user.usage.monthlyEntryCount}, Limit: ${type === 'journal' ? currentLimits.j : currentLimits.e}`);
+    }
+    return reached;
   },
   heartbeat: async () => {
     if (!get().isAuthenticated || !get().token) return;
@@ -159,7 +163,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isLoading: true });
     try {
       const res = await api<AuthResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify(req) });
-      sessionKey = req.password;
       localStorage.setItem('lumina_token', res.token);
       set({ user: res.user, token: res.token, isAuthenticated: true, isLoading: false, isInitialized: true });
       get().initialize();
@@ -173,7 +176,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isLoading: true });
     try {
       const res = await api<AuthResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify(req) });
-      sessionKey = req.password;
       localStorage.setItem('lumina_token', res.token);
       set({ user: res.user, token: res.token, isAuthenticated: true, isLoading: false, isInitialized: true });
       toast.success('Your digital legacy has begun.');
@@ -205,7 +207,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchEntries: async (journalId, params = '') => {
     try {
       const url = `/api/journals/${journalId}/entries${params ? `?${params}` : ''}`;
-      let entries = await api<Entry[]>(url);
+      const entries = await api<Entry[]>(url);
       set({ entries });
     } catch (error) {
       console.error(`Failed to fetch entries for journal ${journalId}`, error);
@@ -269,7 +271,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   logout: () => {
     if (heartbeatInterval) clearInterval(heartbeatInterval);
-    sessionKey = null;
     localStorage.removeItem('lumina_token');
     localStorage.removeItem('lumina_chat');
     localStorage.removeItem('lumina_drafts');

@@ -9,7 +9,8 @@ import {
   User as UserIcon,
   LogOut,
   BrainCircuit,
-  History
+  History,
+  Keyboard
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/lib/store";
@@ -42,9 +43,17 @@ export function AppSidebar(): JSX.Element {
     navigate('/');
   };
   return (
-    <Sidebar className="border-r border-stone-200 dark:border-stone-800">
+    <Sidebar 
+      className="border-r border-stone-200 dark:border-stone-800"
+      role="navigation"
+      aria-label="Lumina Main Navigation"
+    >
       <SidebarHeader className="p-4 flex flex-row items-center justify-between">
-        <Link to="/" className="flex items-center gap-3 px-2 group">
+        <Link 
+          to="/" 
+          className="flex items-center gap-3 px-2 group focus-visible:ring-2 focus-visible:ring-stone-900 rounded-lg outline-none"
+          aria-label="Lumina Home"
+        >
           <div className="h-8 w-8 rounded-lg bg-stone-900 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
             <Sparkles size={18} />
           </div>
@@ -53,12 +62,17 @@ export function AppSidebar(): JSX.Element {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <div>
+              <div className="focus-within:ring-2 focus-within:ring-stone-900 rounded-full">
                 <NotificationCenter />
               </div>
             </TooltipTrigger>
             <TooltipContent side="right">
-              <p className="text-[10px]">Alerts & Transmissions</p>
+              <div className="flex flex-col gap-1">
+                <p className="text-[10px]">Alerts & Transmissions</p>
+                <div className="flex items-center gap-1 opacity-60">
+                  <Keyboard size={8} /> <span className="text-[8px]">Press 'N' to toggle</span>
+                </div>
+              </div>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -67,7 +81,12 @@ export function AppSidebar(): JSX.Element {
         <SidebarGroup>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton id="tour-nav-dashboard" asChild isActive={location.pathname === "/dashboard"}>
+              <SidebarMenuButton 
+                id="tour-nav-dashboard" 
+                asChild 
+                isActive={location.pathname === "/dashboard"}
+                aria-current={location.pathname === "/dashboard" ? "page" : undefined}
+              >
                 <Link to="/dashboard">
                   <LayoutDashboard className="size-4" />
                   <span>Dashboard</span>
@@ -75,7 +94,12 @@ export function AppSidebar(): JSX.Element {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton id="tour-nav-ai" asChild isActive={location.pathname === "/ai-assistant"}>
+              <SidebarMenuButton 
+                id="tour-nav-ai" 
+                asChild 
+                isActive={location.pathname === "/ai-assistant"}
+                aria-current={location.pathname === "/ai-assistant" ? "page" : undefined}
+              >
                 <Link to="/ai-assistant" className="flex items-center justify-between w-full">
                   <div className="flex items-center gap-2">
                     <BrainCircuit className="size-4 text-amber-500" />
@@ -98,6 +122,7 @@ export function AppSidebar(): JSX.Element {
                 <SidebarMenuButton
                   asChild
                   isActive={location.pathname === `/journal/${journal.id}`}
+                  aria-current={location.pathname === `/journal/${journal.id}` ? "page" : undefined}
                 >
                   <Link to={`/journal/${journal.id}`} className="flex items-center gap-3">
                     <BookText className="size-4" />
@@ -114,7 +139,11 @@ export function AppSidebar(): JSX.Element {
           </SidebarGroupLabel>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={location.pathname === "/insights"}>
+              <SidebarMenuButton 
+                asChild 
+                isActive={location.pathname === "/insights"}
+                aria-current={location.pathname === "/insights" ? "page" : undefined}
+              >
                 <Link to="/insights">
                   <BarChart3 className="size-4" />
                   <span>Insights</span>
@@ -122,7 +151,12 @@ export function AppSidebar(): JSX.Element {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton id="tour-nav-legacy" asChild isActive={location.pathname === "/legacy"}>
+              <SidebarMenuButton 
+                id="tour-nav-legacy" 
+                asChild 
+                isActive={location.pathname === "/legacy"}
+                aria-current={location.pathname === "/legacy" ? "page" : undefined}
+              >
                 <Link to="/legacy">
                   <Heart className="size-4" />
                   <span>Legacy Plan</span>
@@ -130,7 +164,12 @@ export function AppSidebar(): JSX.Element {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton id="tour-nav-activity" asChild isActive={location.pathname === "/activity"}>
+              <SidebarMenuButton 
+                id="tour-nav-activity" 
+                asChild 
+                isActive={location.pathname === "/activity"}
+                aria-current={location.pathname === "/activity" ? "page" : undefined}
+              >
                 <Link to="/activity">
                   <History className="size-4" />
                   <span>Activity Log</span>
@@ -146,7 +185,7 @@ export function AppSidebar(): JSX.Element {
             <SidebarMenuButton asChild isActive={location.pathname === "/profile"} className="p-2 h-auto">
               <Link to="/profile" className="flex items-center gap-3">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user?.profileImage} />
+                  <AvatarImage src={user?.profileImage} alt={user?.name} />
                   <AvatarFallback className="rounded-lg bg-stone-200 text-stone-600">
                     {user?.name?.[0] || <UserIcon size={14} />}
                   </AvatarFallback>
@@ -169,7 +208,7 @@ export function AppSidebar(): JSX.Element {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem className="px-2 pt-2">
-            <div className="flex items-center gap-2 text-[10px] text-stone-400 font-serif italic">
+            <div className="flex items-center gap-2 text-[10px] text-stone-400 font-serif italic" aria-live="polite">
               <div className={cn("h-1.5 w-1.5 rounded-full", isSaving ? "bg-amber-400 animate-pulse" : "bg-emerald-400")} />
               {isSaving ? "Syncing archive..." : "Safe: All changes persisted"}
             </div>
