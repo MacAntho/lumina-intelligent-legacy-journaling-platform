@@ -82,7 +82,7 @@ function runSetupCommands() {
     "bun add bcryptjs",
     "bun add lucide-react@latest",
     "bun add fuse.js",
-    "bun add date-fns"
+    "bun add date-fns lucide-react@latest"
 ];
     
     if (commands.length === 0) {
