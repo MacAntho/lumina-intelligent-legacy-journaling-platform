@@ -15,6 +15,8 @@ interface AppState {
   deleteJournal: (id: string) => Promise<void>;
   addEntry: (entry: Partial<Entry>) => Promise<void>;
   fetchInsights: () => Promise<void>;
+  addLegacyContact: (contact: Partial<LegacyContact>) => Promise<void>;
+  removeLegacyContact: (id: string) => Promise<void>;
 }
 export const useAppStore = create<AppState>((set, get) => ({
   user: { id: 'u1', name: 'Julian Stone', email: 'julian@lumina.io' },
@@ -27,8 +29,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   initialize: async () => {
     set({ isLoading: true });
     try {
-      const journals = await api<Journal[]>('/api/journals');
-      set({ journals, isLoading: false });
+      const [journals, contacts] = await Promise.all([
+        api<Journal[]>('/api/journals'),
+        api<LegacyContact[]>('/api/legacy-contacts')
+      ]);
+      set({ journals, legacyContacts: contacts, isLoading: false });
+      // Background load insights
+      get().fetchInsights();
     } catch (error) {
       console.error('Failed to initialize:', error);
       set({ isLoading: false });
@@ -49,9 +56,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         method: 'POST',
         body: JSON.stringify(journalData),
       });
-      set((state) => ({ 
+      set((state) => ({
         journals: [...state.journals, newJournal],
-        isSaving: false 
+        isSaving: false
       }));
     } catch (error) {
       console.error('Failed to add journal:', error);
@@ -78,7 +85,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       set((state) => ({
         entries: [entry, ...state.entries],
-        journals: state.journals.map(j => 
+        journals: state.journals.map(j =>
           j.id === entry.journalId ? { ...j, lastEntryAt: entry.date } : j
         ),
         isSaving: false
@@ -94,6 +101,32 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ insightData });
     } catch (error) {
       console.error('Failed to fetch insights:', error);
+    }
+  },
+  addLegacyContact: async (contactData) => {
+    set({ isSaving: true });
+    try {
+      const contact = await api<LegacyContact>('/api/legacy-contacts', {
+        method: 'POST',
+        body: JSON.stringify(contactData),
+      });
+      set((state) => ({
+        legacyContacts: [...state.legacyContacts, contact],
+        isSaving: false
+      }));
+    } catch (error) {
+      console.error('Failed to add contact:', error);
+      set({ isSaving: false });
+    }
+  },
+  removeLegacyContact: async (id) => {
+    try {
+      await api(`/api/legacy-contacts/${id}`, { method: 'DELETE' });
+      set((state) => ({
+        legacyContacts: state.legacyContacts.filter(c => c.id !== id)
+      }));
+    } catch (error) {
+      console.error('Failed to remove contact:', error);
     }
   },
 }));

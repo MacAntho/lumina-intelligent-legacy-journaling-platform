@@ -6,17 +6,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Heart, UserPlus, Trash2, Mail, ShieldCheck, Clock } from 'lucide-react';
+import { Heart, UserPlus, Trash2, Mail, ShieldCheck, Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 export function LegacySettings() {
   const legacyContacts = useAppStore((s) => s.legacyContacts);
   const addLegacyContact = useAppStore((s) => s.addLegacyContact);
   const removeLegacyContact = useAppStore((s) => s.removeLegacyContact);
+  const isSaving = useAppStore((s) => s.isSaving);
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const handleAddContact = () => {
+  const handleAddContact = async () => {
     if (!newName || !newEmail) return;
-    addLegacyContact({ name: newName, email: newEmail });
+    await addLegacyContact({ name: newName, email: newEmail });
     setNewName('');
     setNewEmail('');
     toast.success('Recipient added and verification email sent.');
@@ -43,30 +44,34 @@ export function LegacySettings() {
               <CardDescription>People who will receive your legacy content.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-4">
-                {legacyContacts.map((contact) => (
-                  <div key={contact.id} className="flex items-center justify-between p-4 rounded-2xl bg-stone-50 dark:bg-stone-900/50 border border-stone-100 dark:border-stone-800">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-stone-200 flex items-center justify-center text-stone-600 font-medium">
-                        {contact.name[0]}
+              <div className="space-y-4 min-h-[100px]">
+                {legacyContacts.length === 0 ? (
+                  <p className="text-sm text-stone-400 italic text-center py-6">No recipients added yet.</p>
+                ) : (
+                  legacyContacts.map((contact) => (
+                    <div key={contact.id} className="flex items-center justify-between p-4 rounded-2xl bg-stone-50 dark:bg-stone-900/50 border border-stone-100 dark:border-stone-800">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-stone-200 flex items-center justify-center text-stone-600 font-medium">
+                          {contact.name[0]}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{contact.name}</p>
+                          <p className="text-xs text-stone-500">{contact.email}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium">{contact.name}</p>
-                        <p className="text-xs text-stone-500">{contact.email}</p>
+                      <div className="flex items-center gap-3">
+                        {contact.status === 'verified' ? (
+                          <ShieldCheck size={16} className="text-emerald-500" />
+                        ) : (
+                          <span className="text-[10px] uppercase font-bold text-stone-400">Pending</span>
+                        )}
+                        <button onClick={() => removeLegacyContact(contact.id)} className="text-stone-300 hover:text-red-500 transition-colors">
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {contact.status === 'verified' ? (
-                        <ShieldCheck size={16} className="text-emerald-500" />
-                      ) : (
-                        <span className="text-[10px] uppercase font-bold text-stone-400">Pending</span>
-                      )}
-                      <button onClick={() => removeLegacyContact(contact.id)} className="text-stone-300 hover:text-red-500 transition-colors">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
               <div className="pt-4 border-t border-stone-100 dark:border-stone-800 space-y-4">
                 <div className="grid gap-2">
@@ -77,7 +82,8 @@ export function LegacySettings() {
                   <Label htmlFor="email">Email Address</Label>
                   <Input id="email" type="email" placeholder="john@example.com" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="rounded-xl" />
                 </div>
-                <Button onClick={handleAddContact} className="w-full rounded-xl bg-stone-900 text-white" disabled={!newName || !newEmail}>
+                <Button onClick={handleAddContact} className="w-full rounded-xl bg-stone-900 text-white" disabled={!newName || !newEmail || isSaving}>
+                  {isSaving && <Loader2 className="animate-spin mr-2" size={16} />}
                   Add Recipient
                 </Button>
               </div>
@@ -115,7 +121,7 @@ export function LegacySettings() {
                 <CardDescription>The note sent along with your shared journals.</CardDescription>
               </CardHeader>
               <CardContent>
-                <textarea 
+                <textarea
                   className="w-full min-h-[120px] bg-stone-50 dark:bg-stone-900/50 rounded-2xl p-4 text-sm font-light border-none focus:ring-1 focus:ring-stone-400 outline-none resize-none"
                   placeholder="Share a final thought or instruction..."
                   defaultValue="This journal contains my reflections and memories that I'd like you to have. I hope these words bring you comfort and clarity."

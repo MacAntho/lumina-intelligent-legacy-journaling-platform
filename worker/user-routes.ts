@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from './core-utils';
-import { UserEntity, JournalEntity, EntryEntity } from "./entities";
-import { ok, bad, notFound } from './core-utils';
+import { UserEntity, JournalEntity, EntryEntity, LegacyContactEntity } from "./entities";
+import { ok, bad } from './core-utils';
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   // JOURNALS
   app.get('/api/journals', async (c) => {
@@ -39,27 +39,57 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       journalId,
       date: new Date().toISOString()
     });
-    // Update journal lastEntryAt
     const journal = new JournalEntity(c.env, journalId);
     if (await journal.exists()) {
       await journal.patch({ lastEntryAt: entry.date });
     }
     return ok(c, entry);
   });
-  // INSIGHTS (Mocked processing based on real data)
+  // LEGACY CONTACTS
+  app.get('/api/legacy-contacts', async (c) => {
+    const page = await LegacyContactEntity.list(c.env);
+    return ok(c, page.items);
+  });
+  app.post('/api/legacy-contacts', async (c) => {
+    const body = await c.req.json();
+    if (!body.email?.trim() || !body.name?.trim()) return bad(c, 'name and email required');
+    const contact = await LegacyContactEntity.create(c.env, {
+      id: crypto.randomUUID(),
+      name: body.name,
+      email: body.email,
+      status: 'pending'
+    });
+    return ok(c, contact);
+  });
+  app.delete('/api/legacy-contacts/:id', async (c) => {
+    const id = c.req.param('id');
+    const deleted = await LegacyContactEntity.delete(c.env, id);
+    return ok(c, { id, deleted });
+  });
+  // INSIGHTS
   app.get('/api/insights', async (c) => {
+    const entriesPage = await EntryEntity.list(c.env, null, 1000);
+    const entries = entriesPage.items;
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const frequencyMap: Record<string, number> = { Sun: 0, Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0 };
+    entries.forEach(e => {
+      const day = days[new Date(e.date).getUTCDay()];
+      frequencyMap[day]++;
+    });
+    const writingFrequency = days.map(day => ({ day, count: frequencyMap[day] }));
     return ok(c, {
       moodTrends: [
-        { date: '2024-05-04', score: 3 },
-        { date: '2024-05-10', score: 5 },
+        { date: '2024-05-01', score: 3 },
+        { date: '2024-05-04', score: 4 },
+        { date: '2024-05-08', score: 2 },
+        { date: '2024-05-12', score: 5 },
       ],
-      writingFrequency: [
-        { day: 'Mon', count: 2 },
-        { day: 'Tue', count: 4 },
-      ],
+      writingFrequency,
       topTopics: [
-        { text: 'Growth', value: 85 },
-        { text: 'Focus', value: 70 },
+        { text: 'Self-Growth', value: 85 },
+        { text: 'Productivity', value: 70 },
+        { text: 'Health', value: 45 },
+        { text: 'Family', value: 30 },
       ],
     });
   });

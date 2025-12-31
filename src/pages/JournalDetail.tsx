@@ -4,9 +4,10 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ChevronLeft, Send, Sparkles, Trash2, Calendar, BookText, Loader2 } from 'lucide-react';
+import { ChevronLeft, Send, Sparkles, Calendar, Loader2, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 export function JournalDetail() {
   const { id } = useParams();
   const journals = useAppStore((s) => s.journals);
@@ -27,29 +28,38 @@ export function JournalDetail() {
       mood: 'Normal'
     });
     setContent('');
+    toast.success('Entry preserved successfully.');
+  };
+  const handleExport = () => {
+    window.print();
   };
   if (!journal) return <div className="p-20 text-center">Journal not found</div>;
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        <header className="mb-12">
-          <Link to="/dashboard" className="inline-flex items-center text-sm text-stone-500 hover:text-stone-900 mb-6 group">
-            <ChevronLeft size={16} className="mr-1 group-hover:-translate-x-1 transition-transform" /> Back to Dashboard
-          </Link>
+      <div className="max-w-4xl mx-auto px-6 py-12 print:p-0">
+        <header className="mb-12 print:mb-8">
+          <div className="flex items-center justify-between mb-6 print:hidden">
+            <Link to="/dashboard" className="inline-flex items-center text-sm text-stone-500 hover:text-stone-900 group">
+              <ChevronLeft size={16} className="mr-1 group-hover:-translate-x-1 transition-transform" /> Back to Dashboard
+            </Link>
+            <Button variant="outline" size="sm" onClick={handleExport} className="rounded-full gap-2">
+              <Download size={14} /> Export Journal
+            </Button>
+          </div>
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-amber-600 mb-2">{journal.type}</div>
               <h1 className="text-4xl font-serif font-medium text-stone-900 dark:text-stone-50">{journal.title}</h1>
               <p className="text-stone-500 mt-2 font-light">{journal.description}</p>
             </div>
-            <div className="flex gap-2 text-stone-400 text-sm">
+            <div className="flex gap-2 text-stone-400 text-sm print:text-stone-900">
               <Calendar size={14} className="mt-0.5" />
               <span>Created {journal.createdAt ? format(new Date(journal.createdAt), 'MMMM yyyy') : '...'}</span>
             </div>
           </div>
         </header>
         <div className="grid grid-cols-1 gap-12">
-          <section className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-8 shadow-sm transition-all focus-within:shadow-md focus-within:border-stone-400">
+          <section className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-8 shadow-sm transition-all focus-within:shadow-md focus-within:border-stone-400 print:hidden">
             <div className="flex items-center gap-2 mb-4 text-xs font-medium text-stone-400 uppercase tracking-widest">
               <Sparkles size={14} className="text-amber-500" /> Intelligence Enabled
             </div>
@@ -74,28 +84,30 @@ export function JournalDetail() {
               </Button>
             </div>
           </section>
-          <section className="space-y-8 pb-20">
-            <h2 className="text-xl font-medium text-stone-900 dark:text-stone-100 flex items-center gap-2">
+          <section className="space-y-8 pb-20 print:pb-0">
+            <h2 className="text-xl font-medium text-stone-900 dark:text-stone-100 flex items-center gap-2 print:hidden">
               Past Entries <span className="text-sm font-normal text-stone-400">({entries.length})</span>
             </h2>
-            <div className="space-y-6 relative">
+            <div className="space-y-6 relative print:space-y-12">
               <AnimatePresence mode="popLayout">
                 {entries.length === 0 ? (
-                  <div className="py-12 text-stone-400 italic font-light">No entries yet. Start writing...</div>
+                  <div className="py-12 text-stone-400 italic font-light print:hidden">No entries yet. Start writing...</div>
                 ) : (
                   entries.map((entry) => (
                     <motion.div
                       key={entry.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="bg-stone-50 dark:bg-stone-900/50 border border-stone-100 dark:border-stone-800 rounded-2xl p-6"
+                      className="bg-stone-50 dark:bg-stone-900/50 border border-stone-100 dark:border-stone-800 rounded-2xl p-6 print:border-none print:bg-transparent print:p-0"
                     >
-                      <div className="flex items-center justify-between mb-4">
-                        <time className="text-xs font-medium text-stone-400">
+                      <div className="flex items-center justify-between mb-4 print:border-b print:border-stone-200 print:pb-2">
+                        <time className="text-xs font-medium text-stone-400 print:text-stone-900 print:font-bold">
                           {format(new Date(entry.date), 'EEEE, MMMM dd, yyyy')}
                         </time>
                       </div>
-                      <p className="text-stone-700 dark:text-stone-300 font-serif leading-relaxed whitespace-pre-wrap">{entry.content}</p>
+                      <p className="text-stone-700 dark:text-stone-300 font-serif text-lg leading-relaxed whitespace-pre-wrap print:text-stone-900">
+                        {entry.content}
+                      </p>
                     </motion.div>
                   ))
                 )}
