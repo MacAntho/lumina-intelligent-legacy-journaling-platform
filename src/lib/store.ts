@@ -329,23 +329,32 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (e) { console.warn('Export history fetch failed', e); } 
   },
   sendAiMessage: async (content) => {
-    const userMsg: AiMessage = { id: crypto.randomUUID(), role: 'user', content, timestamp: new Date().toISOString() };
-    const newHistory = [...get().aiChatHistory, userMsg];
-    set({ aiChatHistory: newHistory, isSaving: true });
+    const history = get().aiChatHistory;
+    const userMsg: AiMessage = { 
+      id: crypto.randomUUID(), 
+      role: 'user', 
+      content, 
+      timestamp: new Date().toISOString() 
+    };
+    const newHistory = [...history, userMsg];    set({ aiChatHistory: newHistory, isSaving: true });
     try {
-      await new Promise(r => setTimeout(r, 1500));
+      const responseText = await api<string>('/api/ai/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message: content, history })
+      });
+      
       const botMsg: AiMessage = {
-        id: crypto.randomUUID(), role: 'assistant',
-        content: `I've analyzed your request regarding "${content.slice(0, 20)}...". Looking at your recent reflections, I notice a pattern of growth. How does that align with your current goals?`,
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: responseText,
         timestamp: new Date().toISOString()
       };
-      const updatedHistory = [...newHistory, botMsg];
-      set({ aiChatHistory: updatedHistory, isSaving: false });
-      localStorage.setItem('lumina_chat', JSON.stringify(updatedHistory));
+      const finalHistory = [...newHistory, botMsg];
+      set({ aiChatHistory: finalHistory, isSaving: false });
+      localStorage.setItem('lumina_chat', JSON.stringify(finalHistory));
     } catch (e) {
       set({ isSaving: false });
-      toast.error("AI Assistant is offline");
-      console.error('AI chat message failed', e);
+      toast.error("Intelligence Link is unstable");
     }
   },
   clearChatHistory: () => { 

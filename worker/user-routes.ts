@@ -8,6 +8,7 @@ import {
   LegacyAuditLogEntity, NotificationEntity,
   SavedSearchEntity, PromptEntity
 } from "./entities";
+import { chatWithAssistant } from "./intelligence";
 import { ok, bad, notFound } from './core-utils';
 import type { LoginRequest, RegisterRequest, DailyContent, User } from "@shared/types";
 const JWT_SECRET = "lumina-secret-key-change-this";
@@ -309,5 +310,15 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       ...prompts.map(p => ({ id: p.id, type: 'system' as const, title: 'Daily Prompt', message: p.prompt, timestamp: p.createdAt }))
     ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     return ok(c, stream.slice(0, 50));
+  });
+
+  // AI Chat Route
+  app.post('/api/ai/chat', async (c) => {
+    const payload = c.get('jwtPayload');
+    const { message, history } = await c.req.json();
+    const entries = await EntryEntity.listByUser(c.env, payload.userId);
+    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
+    const response = await chatWithAssistant(userAuth?.profile.name || 'Explorer', message, history, entries.slice(0, 30));
+    return ok(c, response);
   });
 }
