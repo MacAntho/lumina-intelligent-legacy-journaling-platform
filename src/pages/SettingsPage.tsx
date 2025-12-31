@@ -6,12 +6,15 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Settings, Moon, Globe, Bell, Shield, Download, Trash2, Loader2, Sparkles, Share2, FileDown, RefreshCw } from 'lucide-react';
+import { Settings, Moon, Globe, Bell, Shield, Download, Trash2, Loader2, Sparkles, Share2, FileDown, RefreshCw, GraduationCap } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 export function SettingsPage() {
   const user = useAppStore(s => s.user);
   const isSaving = useAppStore(s => s.isSaving);
   const updateProfile = useAppStore(s => s.updateProfile);
+  const restartTour = useAppStore(s => s.restartTour);
+  const navigate = useNavigate();
   const handlePreferenceChange = async (key: string, value: any) => {
     if (!user) return;
     const newPrefs = { ...user.preferences, [key]: value };
@@ -22,6 +25,11 @@ export function SettingsPage() {
     if (!user) return;
     const newSettings = { ...user.preferences.notificationSettings, [type]: value };
     await handlePreferenceChange('notificationSettings', newSettings);
+  };
+  const handleRestartTour = async () => {
+    await restartTour();
+    navigate('/dashboard');
+    toast.success('Onboarding tour restarted.');
   };
   const handleRecoverManifest = () => {
     if ('serviceWorker' in navigator) {
@@ -90,6 +98,22 @@ export function SettingsPage() {
             </Card>
             <Card className="rounded-3xl border-stone-200 shadow-sm bg-white/50 backdrop-blur-sm">
               <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg"><GraduationCap size={18} /> Learning Center</CardTitle>
+                <CardDescription>Resources to master the Lumina experience.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-xs text-stone-500 font-light leading-relaxed">
+                  The guided tour walks you through creating your first journal, using AI insights, and securing your digital legacy.
+                </p>
+                <Button variant="outline" onClick={handleRestartTour} className="w-full justify-start gap-2 rounded-xl">
+                  <RefreshCw size={16} /> Restart Guided Tour
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="space-y-8">
+            <Card className="rounded-3xl border-stone-200 shadow-sm bg-white/50 backdrop-blur-sm">
+              <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg"><Bell size={18} /> Notification Controls</CardTitle>
                 <CardDescription>Configure how and when you want to be notified.</CardDescription>
               </CardHeader>
@@ -149,37 +173,8 @@ export function SettingsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="pt-6 border-t border-stone-100 space-y-4">
-                   <div className="flex items-center justify-between">
-                    <Label className="text-xs">Quiet Hours</Label>
-                    <Switch
-                      checked={user?.preferences?.quietHours?.enabled}
-                      onCheckedChange={(v) => handlePreferenceChange('quietHours', { ...user?.preferences?.quietHours, enabled: v })}
-                    />
-                  </div>
-                  {user?.preferences?.quietHours?.enabled && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <Select
-                        value={user?.preferences?.quietHours?.start}
-                        onValueChange={(v) => handlePreferenceChange('quietHours', { ...user?.preferences?.quietHours, start: v })}
-                      >
-                        <SelectTrigger className="rounded-xl h-8 text-xs"><SelectValue placeholder="Start" /></SelectTrigger>
-                        <SelectContent>{hours.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <Select
-                        value={user?.preferences?.quietHours?.end}
-                        onValueChange={(v) => handlePreferenceChange('quietHours', { ...user?.preferences?.quietHours, end: v })}
-                      >
-                        <SelectTrigger className="rounded-xl h-8 text-xs"><SelectValue placeholder="End" /></SelectTrigger>
-                        <SelectContent>{hours.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
               </CardContent>
             </Card>
-          </div>
-          <div className="space-y-8">
             <Card className="rounded-3xl border-stone-200 shadow-sm bg-white/50 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg"><Shield size={18} /> Privacy & Data</CardTitle>

@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { SearchFilters } from '@shared/types';
+import { format as dateFnsFormat } from 'date-fns';
 interface AdvancedSearchProps<T> {
   items: T[];
   onResults: (results: T[]) => void;
@@ -67,19 +68,20 @@ export function AdvancedSearch<T extends Record<string, any>>({
       return true;
     });
   }, [items, query, filters, searchFields, context]);
-  // Stable result reporting. 
-  // We use stringify to compare the result set to avoid re-triggering parent renders if results haven't actually changed.
-  const resultSignature = JSON.stringify(filteredItems.map(i => i.id).sort());
+  // Stable result reporting.
+  const resultSignature = useMemo(() => {
+    return JSON.stringify(filteredItems.map(i => i.id).sort());
+  }, [filteredItems]);
   useEffect(() => {
     onResults(filteredItems);
-  }, [resultSignature, onResults]); // onResults must be stable (from parent)
+  }, [resultSignature, onResults, filteredItems]);
   const handleApplySaved = (saved: any) => {
     setQuery(saved.query);
     setFilters(saved.filters);
     setIsDropdownOpen(false);
   };
   const handleSaveCurrent = () => {
-    const name = query || `Search ${format(new Date(), 'HH:mm')}`;
+    const name = query || `Search ${dateFnsFormat(new Date(), 'HH:mm')}`;
     saveSearch({ name, query, filters });
   };
   const toggleFilterArray = (key: 'moods' | 'tags' | 'templateIds', value: string) => {
@@ -233,7 +235,7 @@ export function AdvancedSearch<T extends Record<string, any>>({
                     onChange={(e) => setFilters(f => ({ ...f, dateRange: { ...(f.dateRange || { start: '', end: '' }), end: e.target.value } }))}
                   />
                 </div>
-                <Button variant="ghost" className="w-full text-[10px] uppercase font-bold h-8" onClick={() => setFilters({})}>Reset Filters</Button>
+                <button className="w-full text-[10px] uppercase font-bold h-8 text-stone-500 hover:text-stone-900 transition-colors" onClick={() => setFilters({})}>Reset Filters</button>
               </div>
               <div className="md:col-span-3 pt-4 border-t border-stone-200 flex justify-between items-center">
                 <span className="text-xs text-stone-400 font-serif italic">
@@ -249,9 +251,4 @@ export function AdvancedSearch<T extends Record<string, any>>({
       </AnimatePresence>
     </div>
   );
-}
-function format(date: Date, formatStr: string) {
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  if (formatStr === 'HH:mm') return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  return date.toISOString();
 }

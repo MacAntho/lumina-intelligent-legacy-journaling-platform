@@ -67,7 +67,7 @@ export function AppSidebar(): JSX.Element {
         <SidebarGroup>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={location.pathname === "/dashboard"}>
+              <SidebarMenuButton id="tour-nav-dashboard" asChild isActive={location.pathname === "/dashboard"}>
                 <Link to="/dashboard">
                   <LayoutDashboard className="size-4" />
                   <span>Dashboard</span>
@@ -75,7 +75,7 @@ export function AppSidebar(): JSX.Element {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={location.pathname === "/ai-assistant"}>
+              <SidebarMenuButton id="tour-nav-ai" asChild isActive={location.pathname === "/ai-assistant"}>
                 <Link to="/ai-assistant" className="flex items-center justify-between w-full">
                   <div className="flex items-center gap-2">
                     <BrainCircuit className="size-4 text-amber-500" />
@@ -122,7 +122,7 @@ export function AppSidebar(): JSX.Element {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={location.pathname === "/legacy"}>
+              <SidebarMenuButton id="tour-nav-legacy" asChild isActive={location.pathname === "/legacy"}>
                 <Link to="/legacy">
                   <Heart className="size-4" />
                   <span>Legacy Plan</span>
@@ -130,7 +130,7 @@ export function AppSidebar(): JSX.Element {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={location.pathname === "/activity"}>
+              <SidebarMenuButton id="tour-nav-activity" asChild isActive={location.pathname === "/activity"}>
                 <Link to="/activity">
                   <History className="size-4" />
                   <span>Activity Log</span>

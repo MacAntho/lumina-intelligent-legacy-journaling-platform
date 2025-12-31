@@ -4,15 +4,16 @@ Wraps children in a sidebar layout. Don't use this if you don't need a sidebar
 import React from "react";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-
+import { OnboardingTour } from "@/components/OnboardingTour";
+import { useAppStore } from "@/lib/store";
 type AppLayoutProps = {
   children: React.ReactNode;
   container?: boolean;
   className?: string;
   contentClassName?: string;
 };
-
 export function AppLayout({ children, container = false, className, contentClassName }: AppLayoutProps): JSX.Element {
+  const isTourActive = useAppStore(s => s.isTourActive);
   return (
     <SidebarProvider defaultOpen={false}>
       <AppSidebar />
@@ -26,6 +27,7 @@ export function AppLayout({ children, container = false, className, contentClass
           children
         )}
       </SidebarInset>
+      {isTourActive && <OnboardingTour />}
     </SidebarProvider>
   );
 }

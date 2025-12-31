@@ -27,6 +27,8 @@ interface AppState {
   isLoading: boolean;
   isSaving: boolean;
   isInitialized: boolean;
+  isTourActive: boolean;
+  tourStep: number;
   initialize: () => Promise<void>;
   login: (req: LoginRequest) => Promise<void>;
   register: (req: RegisterRequest) => Promise<void>;
@@ -57,6 +59,10 @@ interface AppState {
   fetchSavedSearches: () => Promise<void>;
   saveSearch: (search: Partial<SavedSearch>) => Promise<void>;
   deleteSavedSearch: (id: string) => Promise<void>;
+  startTour: () => void;
+  nextTourStep: () => void;
+  skipTour: () => Promise<void>;
+  restartTour: () => Promise<void>;
 }
 export const useAppStore = create<AppState>((set, get) => ({
   user: null,
@@ -78,6 +84,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   isLoading: false,
   isSaving: false,
   isInitialized: false,
+  isTourActive: false,
+  tourStep: 0,
   initialize: async () => {
     const token = get().token;
     if (!token || get().isInitialized) return;
@@ -92,7 +100,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         legacyContacts: contacts,
         isAuthenticated: true,
         isLoading: false,
-        isInitialized: true
+        isInitialized: true,
+        isTourActive: !user.preferences?.onboardingCompleted
       });
       get().fetchInsights();
       get().fetchDailyContent();
@@ -128,7 +137,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         token: res.token,
         isAuthenticated: true,
         isLoading: false,
-        isInitialized: true
+        isInitialized: true,
+        isTourActive: !res.user.preferences?.onboardingCompleted
       });
       toast.success('Sanctuary Unlocked');
       if (heartbeatInterval) clearInterval(heartbeatInterval);
@@ -152,7 +162,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         token: res.token,
         isAuthenticated: true,
         isLoading: false,
-        isInitialized: true
+        isInitialized: true,
+        isTourActive: true
       });
       toast.success('Your digital legacy has begun.');
       if (heartbeatInterval) clearInterval(heartbeatInterval);
@@ -188,7 +199,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       recentSearches: [],
       savedSearches: [],
       isInitialized: false,
-      isLoading: false
+      isLoading: false,
+      isTourActive: false,
+      tourStep: 0
     });
   },
   updateProfile: async (profile) => {
@@ -434,5 +447,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       set(state => ({ savedSearches: state.savedSearches.filter(s => s.id !== id) }));
       toast.success('Search pattern removed');
     } catch (e) { console.error('Delete saved search failed', e); }
+  },
+  startTour: () => set({ isTourActive: true, tourStep: 0 }),
+  nextTourStep: () => set(state => ({ tourStep: state.tourStep + 1 })),
+  skipTour: async () => {
+    set({ isTourActive: false, tourStep: 0 });
+    await get().updateProfile({ onboardingCompleted: true } as any);
+  },
+  restartTour: async () => {
+    set({ isTourActive: true, tourStep: 0 });
+    await get().updateProfile({ onboardingCompleted: false } as any);
   }
 }));

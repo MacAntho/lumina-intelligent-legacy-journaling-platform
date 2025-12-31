@@ -21,6 +21,7 @@ export class UserAuthEntity extends IndexedEntity<UserAuthData> {
         theme: 'system',
         notificationsEnabled: true,
         language: 'en',
+        onboardingCompleted: false,
         notificationSettings: {
           entry: true, prompt: true, affirmation: true, share: true, access: true, insight: true, export: true, reminder: true, limit: true, activity: true
         },

@@ -39,6 +39,8 @@ export interface UserPreferences {
   language: 'en' | 'es' | 'fr' | 'de';
   defaultJournalId?: string;
   notificationSettings: Record<NotificationType, boolean>;
+  onboardingCompleted: boolean;
+  tourStep?: number;
   quietHours: {
     start: string; // "HH:mm"
     end: string;   // "HH:mm"
