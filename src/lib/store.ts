@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { api } from './api-client';
 import { toast } from 'sonner';
 import type {
-  Journal, Entry, User, LegacyContact, InsightData, SavedSearch,
+  Journal, Entry, User, LegacyContact, InsightData, SavedSearch, AiInsight,
   LoginRequest, RegisterRequest, AuthResponse, AiMessage,
   DailyContent, ExportLog, LegacyAuditLog, AppNotification
 } from '@shared/types';
@@ -13,6 +13,7 @@ interface AppState {
   isAuthenticated: boolean;
   journals: Journal[];
   entries: Entry[];
+  journalInsights: AiInsight[];
   drafts: Record<string, Partial<Entry>>;
   legacyContacts: LegacyContact[];
   legacyAuditLogs: LegacyAuditLog[];
@@ -43,6 +44,8 @@ interface AppState {
   fetchEntries: (journalId: string, params?: string) => Promise<void>;
   addJournal: (journal: Partial<Journal>) => Promise<void>;
   deleteJournal: (id: string) => Promise<void>;
+  fetchJournalPatterns: (journalId: string, range: string) => Promise<AiInsight>;
+  fetchInsightHistory: () => Promise<void>;
   addEntry: (entry: Partial<Entry>) => Promise<void>;
   setDraft: (journalId: string, draft: Partial<Entry>) => void;
   clearDraft: (journalId: string) => void;
@@ -78,6 +81,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   isAuthenticated: !!localStorage.getItem('lumina_token'),
   journals: [],
   entries: [],
+  journalInsights: [],
   drafts: JSON.parse(localStorage.getItem('lumina_drafts') || '{}'),
   legacyContacts: [],
   legacyAuditLogs: [],
@@ -101,14 +105,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!token || get().isInitialized || get().isLoading) return;
     set({ isLoading: true });
     try {
-      const [user, journals, contacts, entries] = await Promise.all([
+      const [user, journals, contacts, entries, insights] = await Promise.all([
         api<User>('/api/auth/me'),
         api<Journal[]>('/api/journals'),
         api<LegacyContact[]>('/api/legacy-contacts'),
-        api<Entry[]>('/api/entries/all').catch(() => [])
+        api<Entry[]>('/api/entries/all').catch(() => []),
+        api<AiInsight[]>('/api/ai/insights/history').catch(() => [])
       ]);
       set({
-        user, journals, entries, legacyContacts: contacts,
+        user, journals, entries, legacyContacts: contacts, journalInsights: insights,
         isAuthenticated: true, isLoading: false, isInitialized: true,
         isTourActive: !user.preferences?.onboardingCompleted
       });
@@ -211,6 +216,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       console.error('Failed to delete journal', error);
       toast.error('Failed to remove journal');
     }
+  },
+  fetchJournalPatterns: async (journalId, range) => {
+    set({ isSaving: true });
+    try {
+      const insight = await api<AiInsight>(`/api/ai/insights/patterns?journalId=${journalId}&range=${range}`);
+      set(s => ({ journalInsights: [insight, ...s.journalInsights], isSaving: false }));
+      return insight;
+    } catch (e) {
+      set({ isSaving: false });
+      toast.error('Intelligence Analysis failed');
+      throw e;
+    }
+  },
+  fetchInsightHistory: async () => {
+    try {
+      const history = await api<AiInsight[]>('/api/ai/insights/history');
+      set({ journalInsights: history });
+    } catch (e) { console.warn('Insight history fetch failed', e); }
   },
   addEntry: async (entryData) => {
     set({ isSaving: true });

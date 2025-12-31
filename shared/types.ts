@@ -5,6 +5,19 @@ export interface ApiResponse<T = unknown> {
 }
 export type JournalType = 'reflective' | 'fitness' | 'gratitude' | 'legacy' | 'finance' | 'reading' | 'mood' | 'travel' | 'creative' | 'dreams' | 'meals';
 export type NotificationType = 'entry' | 'prompt' | 'affirmation' | 'share' | 'access' | 'insight' | 'export' | 'reminder' | 'limit' | 'activity';
+export type AnalysisRange = 'week' | 'month' | 'year' | 'all';
+export interface AiInsight {
+  id: string;
+  userId: string;
+  journalId: string;
+  range: AnalysisRange;
+  content: string; // The structured narrative
+  moodScore: number;
+  topThemes: string[];
+  goalsIdentified: string[];
+  growthIndicators: string[];
+  createdAt: string;
+}
 export interface AppNotification {
   id: string;
   userId: string;

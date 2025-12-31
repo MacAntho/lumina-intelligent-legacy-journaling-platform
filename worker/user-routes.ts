@@ -8,9 +8,9 @@ import {
   LegacyAuditLogEntity, NotificationEntity,
   SavedSearchEntity, PromptEntity
 } from "./entities";
-import { chatWithAssistant } from "./intelligence";
+import { chatWithAssistant, analyzeJournalPatterns } from "./intelligence";
 import { ok, bad, notFound } from './core-utils';
-import type { LoginRequest, RegisterRequest, DailyContent, User } from "@shared/types";
+import type { LoginRequest, RegisterRequest, DailyContent, User, AnalysisRange } from "@shared/types";
 const JWT_SECRET = "lumina-secret-key-change-this";
 async function hashPassword(password: string, salt: string) {
   const enc = new TextEncoder();
@@ -141,6 +141,43 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     await userAuth.patch({ profile: updated });
     return ok(c, updated);
   });
+
+  // AI Pattern Insights
+  app.get('/api/ai/insights/patterns', async (c) => {
+    const payload = c.get('jwtPayload');
+    const journalId = c.req.query('journalId');
+    const range = (c.req.query('range') || 'week') as AnalysisRange;
+
+    if (!journalId) return bad(c, 'Journal ID required');
+
+    const journal = new JournalEntity(c.env, journalId);
+    const journalState = await journal.getState();
+    if (journalState.userId !== payload.userId) return bad(c, 'Forbidden');
+
+    const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
+    // Filter entries by range
+    const now = Date.now();
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const ranges = { week: 7, month: 30, year: 365, all: 99999 };
+    const limit = ranges[range] * msPerDay;
+    const filtered = entries.filter(e => now - new Date(e.date).getTime() < limit);
+
+    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
+    const analysis = await analyzeJournalPatterns(userAuth?.profile.name || 'Explorer', journalState.title, filtered, range);
+
+    const insight = await AiInsightEntity.create(c.env, {
+      id: crypto.randomUUID(), userId: payload.userId, journalId, range,
+      ...analysis, createdAt: new Date().toISOString()
+    });
+
+    return ok(c, insight);
+  });
+
+  app.get('/api/ai/insights/history', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await AiInsightEntity.listByUser(c.env, payload.userId));
+  });
+
   app.delete('/api/auth/me', async (c) => {
     const payload = c.get('jwtPayload');
     await UserAuthEntity.purgeAllUserData(c.env, payload.userId, payload.email);

@@ -1,4 +1,4 @@
-import type { Entry, AiMessage, InsightData } from "@shared/types";
+import type { Entry, AiMessage, InsightData, AiInsight, AnalysisRange } from "@shared/types";
 export interface IntelligenceContext {
   keywords: string[];
   moodAverage: number;
@@ -78,4 +78,69 @@ export async function chatWithAssistant(
     `The archive remembers what the mind might overlook. You've written ${entries.length} reflections so far. Each one is a stone in the foundation of your legacy. What shall we add today?`
   ];
   return responses[Math.floor(Math.random() * responses.length)];
+}
+
+export async function analyzeJournalPatterns(
+  userName: string,
+  journalTitle: string,
+  entries: Entry[],
+  range: AnalysisRange
+): Promise<Omit<AiInsight, 'id' | 'userId' | 'journalId' | 'range' | 'createdAt'>> {
+  if (entries.length === 0) {
+    return {
+      content: "The pages of this journal remain untouched for the selected period. Every great legacy begins with the first sentence.",
+      moodScore: 3,
+      topThemes: [],
+      goalsIdentified: [],
+      growthIndicators: []
+    };
+  }
+
+  const context = analyzeUserContext(entries);
+  const moodName = context.moodAverage > 4 ? "Radiant" : context.moodAverage > 3 ? "Steady" : "Contemplative";
+  
+  // Heuristic Goal Extraction: Look for "I will", "want to", "need to", "going to"
+  const goalKeywords = ['i will', 'plan to', 'want to', 'need to', 'aim to', 'going to'];
+  const goals: string[] = [];
+  entries.forEach(e => {
+    const sentences = e.content.split(/[.!?]/);
+    sentences.forEach(s => {
+      const lower = s.toLowerCase().trim();
+      if (goalKeywords.some(k => lower.includes(k)) && lower.length < 100) {
+        goals.push(s.trim());
+      }
+    });
+  });
+
+  // Heuristic Growth: Contrast first half vs second half
+  const mid = Math.floor(entries.length / 2);
+  const firstHalf = entries.slice(0, mid);
+  const secondHalf = entries.slice(mid);
+  const growth = [];
+  if (entries.length >= 4) {
+    const earlyKeywords = analyzeUserContext(firstHalf).keywords;
+    const lateKeywords = analyzeUserContext(secondHalf).keywords;
+    const newThemes = lateKeywords.filter(k => !earlyKeywords.includes(k));
+    if (newThemes.length > 0) growth.push(`Shifted focus towards ${newThemes.slice(0, 2).join(' and ')}.`);
+    if (analyzeUserContext(secondHalf).moodAverage > analyzeUserContext(firstHalf).moodAverage) {
+      growth.push("Emotional resilience has trended upwards.");
+    }
+  } else {
+    growth.push("Early stages of pattern formation detected.");
+  }
+
+  const narrativeParts = [
+    `In the sacred archives of "${journalTitle}", your reflections for the past ${range} reveal a ${moodName.toLowerCase()} spirit. Your average resonance sits at ${context.moodAverage.toFixed(1)}/5, suggesting a period of ${context.moodAverage > 3.5 ? 'active expansion' : 'deep internal processing'}.`,
+    `I have observed that your thoughts frequently orbit around ${context.keywords.slice(0, 3).join(', ')}. These aren't merely words; they are the recurring melodies of your current life chapter. Specifically, your focus on ${context.frequentTags[0] || 'your core values'} has provided a steady anchor through varying tides.`,
+    `Through the Lumina lens, I see you grappling with ${goals.length > 0 ? 'specific intentions like ' + goals[0].toLowerCase() : 'the quiet evolution of your character'}. This shows a mind that is not merely existing, but consciously architecting its own growth.`,
+    `As you continue this journey, consider leaning further into ${context.keywords[Math.floor(Math.random() * context.keywords.length)] || 'reflection'}. You are building more than a journal; you are preserving a legacy of awareness.`
+  ];
+
+  return {
+    content: narrativeParts.join('\n\n'),
+    moodScore: context.moodAverage,
+    topThemes: context.keywords.slice(0, 5),
+    goalsIdentified: Array.from(new Set(goals)).slice(0, 3),
+    growthIndicators: growth
+  };
 }
