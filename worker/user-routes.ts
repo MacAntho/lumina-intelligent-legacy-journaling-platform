@@ -7,8 +7,7 @@ import {
   LegacyContactEntity, LegacyShareEntity, ExportLogEntity,
   LegacyAuditLogEntity, NotificationEntity,
   SavedSearchEntity, PromptEntity,
-  AiInsightEntity,
-  EntryEntity
+  AiInsightEntity
 } from "./entities";
 import { chatWithAssistant, analyzeJournalPatterns } from "./intelligence";
 import { ok, bad, notFound } from './core-utils';
@@ -69,12 +68,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const inst = new LegacyShareEntity(c.env, shareId);
     if (!(await inst.exists())) return notFound(c);
     const share = await inst.getState();
-    const hash = await hashPassword(password, "legacy-salt"); // Simplified salt for public verification
+    const hash = await hashPassword(password, "legacy-salt"); 
     if (hash !== share.passwordHash) return bad(c, 'Incorrect password');
-    const journal = new JournalEntity(c.env, share.journalId);
-    const journalState = await journal.getState();
     const data = {
-      journalTitle: journalState.title,
+      journalTitle: "Verified Journal",
       authorName: 'Verified Author',
       passwordRequired: false,
       permissions: share.permissions,
@@ -144,43 +141,33 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     await userAuth.patch({ profile: updated });
     return ok(c, updated);
   });
-
   // AI Pattern Insights
   app.get('/api/ai/insights/patterns', async (c) => {
     const payload = c.get('jwtPayload');
     const journalId = c.req.query('journalId');
     const range = (c.req.query('range') || 'week') as AnalysisRange;
-
     if (!journalId) return bad(c, 'Journal ID required');
-
     const journal = new JournalEntity(c.env, journalId);
     const journalState = await journal.getState();
     if (journalState.userId !== payload.userId) return bad(c, 'Forbidden');
-
     const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
-    // Filter entries by range
     const now = Date.now();
     const msPerDay = 24 * 60 * 60 * 1000;
     const ranges = { week: 7, month: 30, year: 365, all: 99999 };
-    const limit = ranges[range] * msPerDay;
+    const limit = (ranges[range as keyof typeof ranges] || 7) * msPerDay;
     const filtered = entries.filter(e => now - new Date(e.date).getTime() < limit);
-
     const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
     const analysis = await analyzeJournalPatterns(userAuth?.profile.name || 'Explorer', journalState.title, filtered, range);
-
     const insight = await AiInsightEntity.create(c.env, {
       id: crypto.randomUUID(), userId: payload.userId, journalId, range,
       ...analysis, createdAt: new Date().toISOString()
     });
-
     return ok(c, insight);
   });
-
   app.get('/api/ai/insights/history', async (c) => {
     const payload = c.get('jwtPayload');
     return ok(c, await AiInsightEntity.listByUser(c.env, payload.userId));
   });
-
   app.delete('/api/auth/me', async (c) => {
     const payload = c.get('jwtPayload');
     await UserAuthEntity.purgeAllUserData(c.env, payload.userId, payload.email);
@@ -300,13 +287,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const payload = c.get('jwtPayload');
     const journalId = c.req.query('journalId');
     if (!journalId) return bad(c, 'Journal ID missing');
-
     const journalInst = new JournalEntity(c.env, journalId);
     const journal = await journalInst.getState();
     if (journal.userId !== payload.userId) return bad(c, 'Unauthorized');
-
     const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
-    
     const options = {
       title: c.req.query('title') || journal.title,
       author: c.req.query('author') || 'Lumina Author',
@@ -317,10 +301,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       startDate: c.req.query('start'),
       endDate: c.req.query('end')
     };
-
     try {
       const pdfBytes = await generateServerPdf(journal, entries, options);
-      
       return new Response(pdfBytes, {
         headers: {
           'Content-Type': 'application/pdf',
@@ -333,7 +315,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       return bad(c, 'Failed to generate archive');
     }
   });
-
   app.post('/api/exports', async (c) => {
     const payload = c.get('jwtPayload');
     const body = await c.req.json();
@@ -374,7 +355,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const payload = c.get('jwtPayload');
     return ok(c, await EntryEntity.getSuggestions(c.env, payload.userId));
   });
-  // Activity stream aggregation
   app.get('/api/activity/stream', async (c) => {
     const payload = c.get('jwtPayload');
     const [exports, audits, prompts] = await Promise.all([
@@ -389,8 +369,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     return ok(c, stream.slice(0, 50));
   });
-
-  // AI Chat Route
   app.post('/api/ai/chat', async (c) => {
     const payload = c.get('jwtPayload');
     const { message, history } = await c.req.json();

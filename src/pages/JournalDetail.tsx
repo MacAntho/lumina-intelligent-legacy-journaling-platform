@@ -6,9 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronLeft, Send, Sparkles, Calendar, Loader2, Download, Star, Book, Mic, Eye, PenLine, Maximize2, Minimize2, Type, X } from 'lucide-react';
+import { ChevronLeft, Send, Sparkles, Loader2, Download, Star, Book, Maximize2, Minimize2, Type, X } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { format, isThisWeek, isThisMonth } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -38,20 +36,39 @@ export function JournalDetail() {
   const [exportOpen, setExportOpen] = useState(false);
   const [contextualSuggestion, setContextualSuggestion] = useState<DailyContent | null>(null);
   const [isGettingSuggestion, setIsGettingSuggestion] = useState(false);
+  // Draft initialization: only run when journal ID changes
   useEffect(() => {
-    if (id && drafts[id]) {
+    if (id) {
       const d = drafts[id];
-      setTitle(d.title || '');
-      setTags(d.tags || []);
-      setFormData(d.structuredData || {});
+      if (d) {
+        setTitle(d.title || '');
+        setTags(d.tags || []);
+        setFormData(d.structuredData || {});
+      } else {
+        setTitle('');
+        setTags([]);
+        setFormData({});
+      }
+      fetchEntries(id);
     }
-  }, [id, drafts]);
+  }, [id, fetchEntries]); // Explicitly NOT depend on drafts to avoid typing-sync loops
+  // Autosave Logic (Debounced)
   useEffect(() => {
-    if (id) fetchEntries(id);
-  }, [id, fetchEntries]);
+    if (!id || !title && Object.keys(formData).length === 0) return;
+    const timer = setTimeout(() => {
+      setDraft(id, {
+        title,
+        tags,
+        structuredData: formData,
+        journalId: id
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [id, title, formData, tags, setDraft]);
   const wordCount = useMemo(() => {
     const allText = Object.values(formData).join(' ') + ' ' + title;
-    return allText.trim() === '' ? 0 : allText.trim().split(/\s+/).length;
+    const trimmed = allText.trim();
+    return trimmed === '' ? 0 : trimmed.split(/\s+/).length;
   }, [formData, title]);
   const handleSave = async () => {
     if (!id) return;
@@ -71,15 +88,21 @@ export function JournalDetail() {
     });
     setFormData({});
     setTitle('');
+    setTags([]);
     setContextualSuggestion(null);
     toast.success('Preserved in the archive.');
   };
   const handleGetSuggestion = async () => {
     if (!id) return;
     setIsGettingSuggestion(true);
-    const suggestion = await generateContextualPrompt(id, template.id);
-    setContextualSuggestion(suggestion);
-    setIsGettingSuggestion(false);
+    try {
+      const suggestion = await generateContextualPrompt(id, template.id);
+      setContextualSuggestion(suggestion);
+    } catch (e) {
+      toast.error('Unable to establish intelligence link.');
+    } finally {
+      setIsGettingSuggestion(false);
+    }
   };
   const onSearchResults = useCallback((results: Entry[]) => setFilteredEntries(results), []);
   const groupedEntries = useMemo(() => {

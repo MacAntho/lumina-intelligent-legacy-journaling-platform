@@ -3,12 +3,14 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { BrainCircuit, Sparkles, TrendingUp, Zap, Loader2, Calendar, Target, TrendingDown, History } from 'lucide-react';
+import { BrainCircuit, Sparkles, TrendingUp, Zap, Loader2, History } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { PatternAnalysisCard } from '@/components/PatternAnalysisCard';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { format } from 'date-fns';import { AnimatePresence } from "framer-motion";
+import { format } from 'date-fns';
+import { AnimatePresence } from "framer-motion";
+import type { AiInsight, AnalysisRange } from '@shared/types';
 export function Insights() {
   const insightData = useAppStore((s) => s.insightData);
   const journals = useAppStore((s) => s.journals);
@@ -17,11 +19,15 @@ export function Insights() {
   const fetchJournalPatterns = useAppStore((s) => s.fetchJournalPatterns);
   const isSaving = useAppStore((s) => s.isSaving);
   const [selectedJournal, setSelectedJournal] = useState<string>('');
-  const [selectedRange, setSelectedRange] = useState<string>('week');
-  const [currentAnalysis, setCurrentAnalysis] = useState<any>(null);
+  const [selectedRange, setSelectedRange] = useState<AnalysisRange>('week');
+  const [currentAnalysis, setCurrentAnalysis] = useState<AiInsight | null>(null);
+  const hasInsights = !!insightData;
+  
   useEffect(() => {
-    if (!insightData) fetchInsights();
-  }, [insightData, fetchInsights]);
+    if (!hasInsights) {
+      fetchInsights();
+    }
+  }, [hasInsights, fetchInsights]);
   const handleGenerateAnalysis = async () => {
     if (!selectedJournal) return;
     const insight = await fetchJournalPatterns(selectedJournal, selectedRange);
@@ -33,28 +39,29 @@ export function Insights() {
       <AppLayout container>
         <div className="flex items-center justify-center h-64 py-20">
           <Loader2 className="animate-spin mr-2 h-8 w-8 text-amber-600" />
-          <span className="text-lg text-stone-500">Synchronizing insights...</span>
+          <span className="text-lg text-stone-500 font-serif italic">Synchronizing insights...</span>
         </div>
       </AppLayout>
     );
   }
   return (
     <AppLayout container>
-      <div className="space-y-16 pb-32">
-        <header>
-          <div className="flex items-center gap-2 text-amber-600 mb-2">
+      <div className="space-y-16 pb-32 max-w-7xl mx-auto">
+        <header className="space-y-4">
+          <div className="flex items-center gap-2 text-amber-600">
             <BrainCircuit size={20} />
             <span className="text-xs font-bold uppercase tracking-[0.2em]">Intelligence Engine</span>
           </div>
-          <h1 className="text-4xl font-serif font-medium text-stone-900 dark:text-stone-50">Discovery Hub</h1>
-          <p className="text-stone-500 mt-2 font-light max-w-2xl">
-            Lumina deciphers the subtle threads of your narrative to illuminate your path forward.
-          </p>
+          <div className="space-y-2">
+            <h1 className="text-4xl md:text-5xl font-serif font-medium text-stone-900 dark:text-stone-50 tracking-tight">Discovery Hub</h1>
+            <p className="text-stone-500 font-light max-w-2xl leading-relaxed">
+              Lumina deciphers the subtle threads of your narrative to illuminate your path forward.
+            </p>
+          </div>
         </header>
-        {/* Deep Dive Selector */}
-        <section className="bg-stone-50 rounded-4xl p-10 border border-stone-100 shadow-inner">
+        <section className="bg-stone-50 rounded-4xl p-8 md:p-12 border border-stone-100 shadow-inner">
           <div className="flex flex-col md:flex-row items-end gap-6 mb-12">
-            <div className="flex-1 space-y-3">
+            <div className="flex-1 space-y-3 w-full">
               <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 ml-1">Select Sanctuary</label>
               <Select value={selectedJournal} onValueChange={setSelectedJournal}>
                 <SelectTrigger className="rounded-2xl h-14 bg-white border-stone-200 shadow-sm text-lg font-serif">
@@ -69,7 +76,7 @@ export function Insights() {
             </div>
             <div className="w-full md:w-48 space-y-3">
               <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 ml-1">Time Horizon</label>
-              <Select value={selectedRange} onValueChange={setSelectedRange}>
+              <Select value={selectedRange} onValueChange={(val: AnalysisRange) => setSelectedRange(val)}>
                 <SelectTrigger className="rounded-2xl h-14 bg-white border-stone-200 shadow-sm">
                   <SelectValue />
                 </SelectTrigger>
@@ -81,12 +88,12 @@ export function Insights() {
                 </SelectContent>
               </Select>
             </div>
-            <Button 
-              onClick={handleGenerateAnalysis} 
+            <Button
+              onClick={handleGenerateAnalysis}
               disabled={!selectedJournal || isSaving}
-              className="h-14 px-8 rounded-2xl bg-stone-900 text-white shadow-xl hover:scale-105 transition-all gap-2"
+              className="w-full md:w-auto h-14 px-8 rounded-2xl bg-stone-900 text-white shadow-xl hover:scale-105 transition-all gap-2"
             >
-              {isSaving ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />} Generate Deep Analysis
+              {isSaving ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />} Generate Analysis
             </Button>
           </div>
           <AnimatePresence mode="wait">
@@ -126,7 +133,6 @@ export function Insights() {
             </div>
           )}
         </section>
-        {/* General Trends */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <Card className="lg:col-span-2 rounded-4xl border-stone-100 dark:border-stone-800 shadow-sm overflow-hidden bg-white">
             <CardHeader className="p-8 pb-2">

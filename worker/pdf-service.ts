@@ -11,7 +11,7 @@ export async function generateServerPdf(
   entries: Entry[],
   options: ExportOptions
 ): Promise<Uint8Array> {
-  // @ts-ignore - jspdf types in worker can be tricky
+  // @ts-expect-error - jspdf types in worker can be tricky
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -24,14 +24,12 @@ export async function generateServerPdf(
   const pageWidth = 210;
   const margin = 20;
   const safeBottom = 275;
-  // Helpers
   const addFooter = (pageNum: number) => {
     doc.setFont('times', 'italic');
     doc.setFontSize(9);
     doc.setTextColor(secondaryColor);
     doc.text(`Lumina Archive — Page ${pageNum}`, pageWidth / 2, 287, { align: 'center' });
   };
-  // 1. COVER PAGE
   doc.setFillColor(options.highContrast ? '#ffffff' : '#fdfcfb');
   doc.rect(0, 0, pageWidth, pageHeight, 'F');
   doc.setTextColor(primaryColor);
@@ -57,13 +55,11 @@ export async function generateServerPdf(
   doc.setFont('times', 'normal');
   doc.setFontSize(9);
   doc.text('GENERATED VIA LUMINA INTELLIGENCE EDGE', pageWidth / 2, 275, { align: 'center' });
-  // 2. TABLE OF CONTENTS
   doc.addPage();
   addFooter(2);
   doc.setFont('times', 'bold');
   doc.setFontSize(22);
   doc.text('Archive Index', margin, 30);
-  // Filter entries based on options
   const filteredEntries = entries
     .filter(e => {
       const d = new Date(e.date);
@@ -83,30 +79,23 @@ export async function generateServerPdf(
     doc.text(titleStr.substring(0, 50), margin + 45, tocY);
     tocY += 7;
   });
-  if (filteredEntries.length > 30) {
-    doc.text(`... and ${filteredEntries.length - 30} more entries.`, margin, tocY + 5);
-  }
-  // 3. CONTENT PAGES
   let currentPage = 2;
   filteredEntries.forEach((entry) => {
     doc.addPage();
     currentPage++;
     addFooter(currentPage);
     let currentY = 30;
-    // Entry Header
     doc.setFont('times', 'italic');
     doc.setFontSize(10);
     doc.setTextColor(secondaryColor);
     doc.text(format(new Date(entry.date), 'EEEE, MMMM do, yyyy'), margin, currentY);
     currentY += 12;
-    // Entry Title
     doc.setFont('times', 'bold');
     doc.setFontSize(24);
     doc.setTextColor(primaryColor);
     const splitTitle = doc.splitTextToSize(entry.title || 'Untitled Reflection', 170);
     doc.text(splitTitle, margin, currentY);
     currentY += (splitTitle.length * 10) + 8;
-    // Entry Content
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     doc.setTextColor(primaryColor);
@@ -122,7 +111,6 @@ export async function generateServerPdf(
       doc.text(line, margin, currentY);
       currentY += 7;
     });
-    // Tags
     if (options.includeTags && entry.tags?.length > 0) {
       if (currentY > safeBottom - 10) {
         doc.addPage();
