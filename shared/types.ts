@@ -182,4 +182,40 @@ export interface LegacyAuditLog {
   ip?: string;
   userAgent?: string;
 }
+export interface SavedSearch {
+  id: string;
+  userId: string;
+  name: string;
+  query: string;
+  filters: SearchFilters;
+  createdAt: string;
+}
+export interface SearchFilters {
+  moods?: string[];
+  minStars?: number;
+  hasImages?: boolean;
+  minWordCount?: number;
+  tags?: string[];
+  dateRange?: {
+    start?: string;
+    end?: string;
+  };
+}
+export interface SecurityLog {
+  id: string;
+  userId: string;
+  event: string;
+  ip: string;
+  userAgent: string;
+  timestamp: string;
+}
+export interface LegacyPublicData {
+  journalTitle: string;
+  authorName: string;
+  passwordRequired: boolean;
+  passwordHint?: string;
+  expiresAt?: string;
+  permissions: LegacyPermissions;
+  entries: Entry[] | null;
+}
 export type LegacyTrigger = 'inactivity' | 'scheduled' | 'manual';

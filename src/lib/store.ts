@@ -5,7 +5,7 @@ import type {
   Journal, Entry, User, LegacyContact, InsightData, SavedSearch, AiInsight,
   LoginRequest, RegisterRequest, AuthResponse, AiMessage,
   DailyContent, ExportLog, LegacyAuditLog, AppNotification,
-  ExportOptions
+  SubscriptionTier
 } from '@shared/types';
 import { encryptContent, decryptContent } from './crypto';
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
@@ -111,9 +111,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const stripeMock = new URLSearchParams(window.location.search).get('stripe_mock');
     const mockTier = new URLSearchParams(window.location.search).get('tier') as SubscriptionTier;
     if (stripeMock === 'success' && mockTier) {
-      await api('/api/auth/settings', { 
-        method: 'PUT', 
-        body: JSON.stringify({ preferences: { tier: mockTier } }) 
+      await api('/api/auth/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ preferences: { tier: mockTier } })
       });
       toast.success('Sanctuary Expanded! Welcome to ' + mockTier.toUpperCase());
     }
@@ -128,7 +128,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         api<Entry[]>('/api/entries/all').catch(() => []),
         api<AiInsight[]>('/api/ai/insights/history').catch(() => [])
       ]);
-      
       set({
         user, journals, entries, legacyContacts: contacts, journalInsights: insights,
         isAuthenticated: true, isLoading: false, isInitialized: true,
@@ -151,11 +150,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   isLimitReached: (type) => {
     const user = get().user;
     if (!user) return true;
-    const tier = user.preferences.tier;
-    const limits = { free: { j: 3, e: 100 }, premium: { j: 1000, e: 10000 }, pro: { j: 10000, e: 100000 } };
+    const tier = user.preferences.tier || 'free';
+    const limits = { 
+      free: { j: 3, e: 100 }, 
+      premium: { j: 1000, e: 10000 }, 
+      pro: { j: 10000, e: 100000 } 
+    };
     const currentLimits = limits[tier];
-    if (type === 'journal') return user.usage.journalCount >= currentLimits.j;
-    return user.usage.monthlyEntryCount >= currentLimits.e;
+    if (type === 'journal') return (user.usage?.journalCount || 0) >= currentLimits.j;
+    return (user.usage?.monthlyEntryCount || 0) >= currentLimits.e;
   },
   heartbeat: async () => {
     if (!get().isAuthenticated) return;
@@ -224,7 +227,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const url = `/api/journals/${journalId}/entries${params ? `?${params}` : ''}`;
       let entries = await api<Entry[]>(url);
-      
       if (sessionKey) {
         entries = await Promise.all(entries.map(async (e) => {
           if (e.isEncrypted) {
@@ -287,7 +289,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isSaving: true });
     const journal = get().journals.find(j => j.id === entryData.journalId);
     let payload = { ...entryData };
-    
     if (journal?.isEncrypted && sessionKey && payload.content) {
       try {
         const encrypted = await encryptContent(payload.content, sessionKey);
@@ -295,7 +296,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         payload.isEncrypted = true;
       } catch (e) { toast.error("Encryption failed"); set({ isSaving: false }); return; }
     }
-
     try {
       const entry = await api<Entry>(`/api/journals/${entryData.journalId}/entries`, { method: 'POST', body: JSON.stringify(payload) });
       const displayEntry = journal?.isEncrypted ? { ...entry, content: entryData.content || '' } : entry;
@@ -456,7 +456,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       content,
       timestamp: new Date().toISOString()
     };
-    // Sanitize history for payload efficiency (last 10 messages)
     const sanitizedHistory = history.slice(-10);
     const newHistory = [...history, userMsg];
     set({ aiChatHistory: newHistory, isSaving: true });
@@ -491,9 +490,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (e) { console.warn('Notifications fetch failed', e); }
   },
   markNotificationRead: async (id) => {
-    set(s => ({ 
-      notifications: s.notifications.map(n => n.id === id ? { ...n, isRead: true } : n), 
-      unreadCount: Math.max(0, s.unreadCount - 1) 
+    set(s => ({
+      notifications: s.notifications.map(n => n.id === id ? { ...n, isRead: true } : n),
+      unreadCount: Math.max(0, s.unreadCount - 1)
     }));
     try {
       await api(`/api/notifications/${id}/read`, { method: 'PATCH' });
@@ -541,12 +540,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   startTour: () => set({ isTourActive: true, tourStep: 0 }),
   nextTourStep: () => set(state => ({ tourStep: state.tourStep + 1 })),
-  skipTour: async () => { 
-    set({ isTourActive: false, tourStep: 0 }); 
-    await get().updateProfile({ preferences: { onboardingCompleted: true } as any }); 
+  skipTour: async () => {
+    set({ isTourActive: false, tourStep: 0 });
+    await get().updateProfile({ preferences: { onboardingCompleted: true } as any });
   },
-  restartTour: async () => { 
-    set({ isTourActive: true, tourStep: 0 }); 
-    await get().updateProfile({ preferences: { onboardingCompleted: false } as any }); 
+  restartTour: async () => {
+    set({ isTourActive: true, tourStep: 0 });
+    await get().updateProfile({ preferences: { onboardingCompleted: false } as any });
   }
 }));

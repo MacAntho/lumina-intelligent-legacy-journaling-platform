@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, SlidersHorizontal, History, Bookmark, Calendar, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +26,6 @@ export function AdvancedSearch<T extends Record<string, any>>({
 }: AdvancedSearchProps<T>) {
   const recentSearches = useAppStore(s => s.recentSearches);
   const addRecentSearch = useAppStore(s => s.addRecentSearch);
-  const clearRecentSearches = useAppStore(s => s.clearRecentSearches);
   const savedSearches = useAppStore(s => s.savedSearches);
   const saveSearch = useAppStore(s => s.saveSearch);
   const searchSuggestions = useAppStore(s => s.searchSuggestions);
@@ -44,12 +43,16 @@ export function AdvancedSearch<T extends Record<string, any>>({
       });
       if (!matchesText) return false;
       if (context === 'journal') {
-        if (filters.moods?.length && !filters.moods.includes(item.mood)) return false;
+        const itemMood = item.mood;
+        if (filters.moods?.length && itemMood && !filters.moods.includes(itemMood)) return false;
         const score = item.structuredData?.mood_score || item.structuredData?.intensity || 0;
         if (filters.minStars && score < filters.minStars) return false;
         if (filters.hasImages && (!item.images || item.images.length === 0)) return false;
         if (filters.minWordCount && (item.wordCount || 0) < filters.minWordCount) return false;
-        if (filters.tags?.length && !filters.tags.some((t: string) => item.tags?.includes(t))) return false;
+        if (filters.tags?.length) {
+          const itemTags = item.tags || [];
+          if (!filters.tags.some((t: string) => itemTags.includes(t))) return false;
+        }
       }
       if (filters.dateRange) {
         const dateVal = item.date || item.createdAt;
@@ -68,19 +71,15 @@ export function AdvancedSearch<T extends Record<string, any>>({
       return true;
     });
   }, [items, query, filters, searchFields, context]);
+  const debouncedResults = useCallback(() => {
+    onResults(filteredItems);
+    setIsRefining(false);
+  }, [filteredItems, onResults]);
   useEffect(() => {
     setIsRefining(true);
-    const timer = setTimeout(() => {
-      onResults(filteredItems);
-      setIsRefining(false);
-    }, 150);
+    const timer = setTimeout(debouncedResults, 150);
     return () => clearTimeout(timer);
-  }, [filteredItems, onResults]);
-  const handleApplySaved = (saved: any) => {
-    setQuery(saved.query);
-    setFilters(saved.filters);
-    setIsDropdownOpen(false);
-  };
+  }, [debouncedResults]);
   const handleSaveCurrent = () => {
     const name = query || `Search ${dateFnsFormat(new Date(), 'HH:mm')}`;
     saveSearch({ name, query, filters });

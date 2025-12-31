@@ -147,7 +147,7 @@ export class EntryEntity extends IndexedEntity<Entry> {
   }
   static async deleteManyByUser(env: Env, userId: string) {
     const entries = await this.listByUser(env, userId);
-    if (entries.length > 0) await this.deleteMany(env, entries.map(e => i.id));
+    if (entries.length > 0) await this.deleteMany(env, entries.map(e => e.id));
   }
   static async getSuggestions(env: Env, userId: string): Promise<{ titles: string[], tags: string[] }> {
     const entries = await this.listByUser(env, userId);
@@ -162,6 +162,14 @@ export class SecurityLogEntity extends IndexedEntity<SecurityLog> {
   static readonly initialState: SecurityLog = {
     id: "", userId: "", event: "login", ip: "", userAgent: "", timestamp: ""
   };
+  static async listByUser(env: Env, userId: string): Promise<SecurityLog[]> {
+    const { items } = await this.list(env, null, 1000);
+    return items.filter(l => l.userId === userId);
+  }
+  static async deleteManyByUser(env: Env, userId: string) {
+    const items = await this.listByUser(env, userId);
+    if (items.length > 0) await this.deleteMany(env, items.map(l => l.id));
+  }
 }
 export class AiInsightEntity extends IndexedEntity<AiInsight> {
   static readonly entityName = "ai-insight";

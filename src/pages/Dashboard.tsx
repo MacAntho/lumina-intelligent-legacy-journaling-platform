@@ -4,7 +4,7 @@ import { useAppStore } from '@/lib/store';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Calendar, TrendingUp, Trash2, Loader2, Library, Check, ChevronRight, Book, Sparkles, RefreshCw, ArrowRight, Flame, History } from 'lucide-react';
+import { Plus, Calendar, TrendingUp, Trash2, Loader2, Library, Check, ChevronRight, Book, Sparkles, RefreshCw, ArrowRight, Flame, History, ShieldCheck } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format, differenceInDays, isSameDay, subDays, startOfDay } from 'date-fns';
@@ -47,7 +47,9 @@ export function Dashboard() {
       .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
     let currentStreak = 0;
     const today = startOfDay(new Date());
-    const latestDate = startOfDay(new Date(sortedDates[0]));
+    const latestDateStr = sortedDates[0];
+    if (!latestDateStr) return 0;
+    const latestDate = startOfDay(new Date(latestDateStr));
     if (differenceInDays(today, latestDate) > 1) return 0;
     for (let i = 0; i < sortedDates.length; i++) {
       const date = startOfDay(new Date(sortedDates[i]));
@@ -110,8 +112,11 @@ export function Dashboard() {
                 </div>
               )}
               {currentTier !== 'free' && (
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-stone-900 text-white rounded-full text-[8px] font-bold uppercase tracking-widest border border-stone-800">
-                  <ShieldCheck size={10} className="text-amber-400" /> {currentTier}
+                <div className={cn(
+                  "flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-bold uppercase tracking-widest border",
+                  currentTier === 'pro' ? "bg-stone-900 text-white border-stone-800" : "bg-amber-50 text-amber-700 border-amber-100"
+                )}>
+                  <ShieldCheck size={10} className={currentTier === 'pro' ? "text-amber-400" : "text-amber-600"} /> {currentTier}
                 </div>
               )}
             </div>
@@ -119,8 +124,8 @@ export function Dashboard() {
           <div className="flex gap-3">
             <Dialog open={isCreateOpen} onOpenChange={(o) => { setIsCreateOpen(o); if(!o) setStep('template'); }}>
               <Button id="tour-new-journal" onClick={handleOpenCreate} className="rounded-full bg-stone-900 hover:bg-stone-800 text-white px-6 gap-2 transition-all hover:scale-105 shadow-xl shadow-stone-200">
-              <Plus size={18} /> New Journal
-            </Button>
+                <Plus size={18} /> New Journal
+              </Button>
               <DialogContent className="rounded-3xl sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
                 <AnimatePresence mode="wait">
                   {step === 'template' ? (

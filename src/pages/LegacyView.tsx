@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api-client';
-import type { LegacyPublicData, Journal } from '@shared/types';
+import type { LegacyPublicData, Journal, Entry } from '@shared/types';
 import { generateJournalPdf } from '@/lib/pdf-export';
 import {
   Loader2, Download, Sparkles, Calendar, Lock,
@@ -95,8 +95,9 @@ export function LegacyView() {
     return (
       <div className="min-h-screen bg-[#FDFCFB] flex flex-col items-center justify-center p-4 text-center space-y-4">
         <ShieldAlert size={48} className="text-rose-500" />
-        <h1 className="text-2xl font-serif text-stone-900">Access Restricted</h1>
+        <h1 className="text-2xl font-serif text-stone-900">Archive Unreachable</h1>
         <p className="text-stone-500 max-w-sm">{error}</p>
+        <p className="text-xs text-stone-400">The transmission may have expired or the security link was revoked.</p>
       </div>
     );
   }

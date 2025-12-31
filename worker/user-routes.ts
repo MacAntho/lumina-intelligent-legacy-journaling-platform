@@ -92,8 +92,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.post('/api/stripe/create-checkout', async (c) => {
     const payload = c.get('jwtPayload');
     const { tier } = await c.req.json();
+    const origin = new URL(c.req.url).origin;
     console.log(`[STRIPE STUB] Creating checkout for user ${payload.userId} to tier ${tier}`);
-    return ok(c, { url: `${window.location.origin}/dashboard?stripe_mock=success&tier=${tier}` });
+    return ok(c, { url: `${origin}/dashboard?stripe_mock=success&tier=${tier}` });
   });
   app.post('/api/journals', async (c) => {
     const payload = c.get('jwtPayload');
