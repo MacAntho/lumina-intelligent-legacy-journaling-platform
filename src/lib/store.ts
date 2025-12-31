@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { api } from './api-client';
 import { toast } from 'sonner';
-import type { Journal, Entry, User, LegacyContact, InsightData, LoginRequest, RegisterRequest, AuthResponse } from '@shared/types';
+import type { Journal, Entry, User, LegacyContact, InsightData, LoginRequest, RegisterRequest, AuthResponse, AiMessage, DailyContent } from '@shared/types';
 interface AppState {
   user: User | null;
   token: string | null;
@@ -11,6 +11,8 @@ interface AppState {
   drafts: Record<string, Partial<Entry>>;
   legacyContacts: LegacyContact[];
   insightData: InsightData | null;
+  aiChatHistory: AiMessage[];
+  dailyContent: DailyContent | null;
   isLoading: boolean;
   isSaving: boolean;
   isInitialized: boolean;
@@ -28,6 +30,9 @@ interface AppState {
   fetchInsights: () => Promise<void>;
   addLegacyContact: (contact: Partial<LegacyContact>) => Promise<void>;
   removeLegacyContact: (id: string) => Promise<void>;
+  fetchDailyContent: () => Promise<void>;
+  sendAiMessage: (content: string) => Promise<void>;
+  clearChatHistory: () => void;
 }
 export const useAppStore = create<AppState>((set, get) => ({
   user: null,
@@ -38,6 +43,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   drafts: JSON.parse(localStorage.getItem('lumina_drafts') || '{}'),
   legacyContacts: [],
   insightData: null,
+  aiChatHistory: JSON.parse(localStorage.getItem('lumina_chat') || '[]'),
+  dailyContent: null,
   isLoading: false,
   isSaving: false,
   isInitialized: false,
@@ -60,6 +67,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         isInitialized: true
       });
       get().fetchInsights();
+      get().fetchDailyContent();
     } catch (error) {
       console.error('Initialization failed:', error);
       get().logout();
@@ -114,6 +122,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   logout: () => {
     localStorage.removeItem('lumina_token');
+    localStorage.removeItem('lumina_chat');
     set({
       user: null,
       token: null,
@@ -122,6 +131,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       entries: [],
       legacyContacts: [],
       insightData: null,
+      aiChatHistory: [],
+      dailyContent: null,
       isInitialized: false
     });
   },
@@ -231,5 +242,45 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('Remove contact failed:', error);
     }
+  },
+  fetchDailyContent: async () => {
+    try {
+      const dailyContent = await api<DailyContent>('/api/ai/daily');
+      set({ dailyContent });
+    } catch (error) {
+      console.error('Fetch daily content failed:', error);
+    }
+  },
+  sendAiMessage: async (content) => {
+    const userMsg: AiMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content,
+      timestamp: new Date().toISOString()
+    };
+    set(state => {
+      const newHistory = [...state.aiChatHistory, userMsg];
+      localStorage.setItem('lumina_chat', JSON.stringify(newHistory));
+      return { aiChatHistory: newHistory, isSaving: true };
+    });
+    try {
+      const response = await api<AiMessage>('/api/ai/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message: content, history: get().aiChatHistory })
+      });
+      set(state => {
+        const newHistory = [...state.aiChatHistory, response];
+        localStorage.setItem('lumina_chat', JSON.stringify(newHistory));
+        return { aiChatHistory: newHistory, isSaving: false };
+      });
+    } catch (error) {
+      console.error('AI chat failed:', error);
+      set({ isSaving: false });
+      toast.error('AI connection lost');
+    }
+  },
+  clearChatHistory: () => {
+    localStorage.removeItem('lumina_chat');
+    set({ aiChatHistory: [] });
   }
 }));

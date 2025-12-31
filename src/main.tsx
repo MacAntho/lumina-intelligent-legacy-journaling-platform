@@ -18,6 +18,7 @@ import { Insights } from '@/pages/Insights'
 import { LegacySettings } from '@/pages/LegacySettings'
 import { AuthPage } from '@/pages/AuthPage'
 import { ProfilePage } from '@/pages/ProfilePage'
+import { AIChat } from '@/pages/AIChat'
 import { AuthGuard } from '@/components/AuthGuard'
 const queryClient = new QueryClient();
 const router = createBrowserRouter([
@@ -54,6 +55,11 @@ const router = createBrowserRouter([
   {
     path: "/profile",
     element: <AuthGuard><ProfilePage /></AuthGuard>,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/ai-assistant",
+    element: <AuthGuard><AIChat /></AuthGuard>,
     errorElement: <RouteErrorBoundary />,
   }
 ]);

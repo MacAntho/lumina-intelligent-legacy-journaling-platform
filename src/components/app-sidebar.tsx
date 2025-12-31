@@ -5,10 +5,10 @@ import {
   BarChart3,
   Heart,
   Settings,
-  PlusCircle,
   Sparkles,
   User as UserIcon,
-  LogOut
+  LogOut,
+  BrainCircuit
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/lib/store";
@@ -25,6 +25,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 export function AppSidebar(): JSX.Element {
   const journals = useAppStore(s => s.journals);
   const user = useAppStore(s => s.user);
@@ -53,6 +54,17 @@ export function AppSidebar(): JSX.Element {
                 <Link to="/dashboard">
                   <LayoutDashboard className="size-4" />
                   <span>Dashboard</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={location.pathname === "/ai-assistant"}>
+                <Link to="/ai-assistant" className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2">
+                    <BrainCircuit className="size-4 text-amber-500" />
+                    <span>AI Assistant</span>
+                  </div>
+                  <Badge variant="secondary" className="text-[8px] h-4 px-1 bg-amber-50 text-amber-700 border-amber-100">BETA</Badge>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

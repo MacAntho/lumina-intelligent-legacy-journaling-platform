@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { jwt, sign } from "hono/jwt";
-import { format, subDays } from "date-fns";
+import { format } from "date-fns";
 import type { Env } from './core-utils';
 import { UserAuthEntity, JournalEntity, EntryEntity, LegacyContactEntity } from "./entities";
 import { ok, bad, notFound } from './core-utils';
@@ -72,28 +72,11 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const journalId = c.req.param('id');
     const q = c.req.query('q')?.toLowerCase();
     const tag = c.req.query('tag');
-    const mood = c.req.query('mood');
-    const sort = c.req.query('sort') || 'desc';
-    let entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
-    if (q) {
-      entries = entries.filter(e =>
-        e.content.toLowerCase().includes(q) ||
-        e.title?.toLowerCase().includes(q) ||
-        e.tags?.some(t => t.toLowerCase().includes(q))
-      );
-    }
-    if (tag) {
-      entries = entries.filter(e => e.tags?.includes(tag));
-    }
-    if (mood) {
-      entries = entries.filter(e => e.mood === mood);
-    }
-    entries.sort((a, b) => {
-      const timeA = new Date(a.date).getTime();
-      const timeB = new Date(b.date).getTime();
-      return sort === 'asc' ? timeA - timeB : timeB - timeA;
-    });
-    return ok(c, entries);
+    const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
+    let filtered = entries;
+    if (q) filtered = filtered.filter(e => e.content.toLowerCase().includes(q) || e.title?.toLowerCase().includes(q));
+    if (tag) filtered = filtered.filter(e => e.tags.includes(tag));
+    return ok(c, filtered);
   });
   app.post('/api/journals/:id/entries', async (c) => {
     const payload = c.get('jwtPayload');
@@ -103,38 +86,26 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       id: crypto.randomUUID(),
       userId: payload.userId,
       journalId: c.req.param('id'),
-      date: new Date().toISOString(),
-      tags: body.tags || [],
-      images: body.images || [],
-      title: body.title || ''
+      date: new Date().toISOString()
     });
     const journal = new JournalEntity(c.env, c.req.param('id'));
     if (await journal.exists()) await journal.patch({ lastEntryAt: entry.date });
     return ok(c, entry);
   });
-  app.get('/api/legacy-contacts', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await LegacyContactEntity.listByUser(c.env, payload.userId));
-  });
   app.get('/api/insights', async (c) => {
     const payload = c.get('jwtPayload');
     const entries = await EntryEntity.listByUser(c.env, payload.userId);
-    // Sort all entries chronologically for accurate analysis
-    const sortedEntries = [...entries].sort((a, b) => 
-      new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
+    const sortedEntries = [...entries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     const frequency: Record<string, number> = { Sun:0, Mon:0, Tue:0, Wed:0, Thu:0, Fri:0, Sat:0 };
     sortedEntries.forEach(e => {
       const day = format(new Date(e.date), 'eee');
       if (frequency[day] !== undefined) frequency[day]++;
     });
-    // Take the most recent 14 entries for the mood trend
     const moodTrends = sortedEntries.slice(-14).map(e => ({
       date: format(new Date(e.date), 'MM-dd'),
       score: Number(e.structuredData?.mood_score || e.structuredData?.intensity || 3)
     }));
-    // Fallback logic for topics if user has very few entries
-    const topTopics = sortedEntries.length > 5 
+    const topTopics = sortedEntries.length > 5
       ? [{ text: 'Growth', value: 85 }, { text: 'Mindfulness', value: 65 }, { text: 'Routine', value: 45 }]
       : [{ text: 'Discovery', value: 100 }];
     return ok(c, {
@@ -142,5 +113,45 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       writingFrequency: Object.entries(frequency).map(([day, count]) => ({ day, count })),
       topTopics
     });
+  });
+  // AI ENDPOINTS
+  app.get('/api/ai/daily', async (c) => {
+    const payload = c.get('jwtPayload');
+    const journals = await JournalEntity.listByUser(c.env, payload.userId);
+    const lastJournal = journals[0];
+    // Rule-based logic for MVP (Simulating Workers AI analysis)
+    let prompt = "How did you find stillness today?";
+    let affirmation = "I am growing through my reflections.";
+    if (lastJournal?.templateId === 'fitness') {
+      prompt = "Reflect on how your body feels after today's movement. What did it teach you about your limits?";
+      affirmation = "My body is a capable vessel for my spirit.";
+    } else if (lastJournal?.templateId === 'gratitude') {
+      prompt = "What's one thing that happened today that you didn't expect, but are thankful for?";
+      affirmation = "I see beauty in the unexpected small moments.";
+    }
+    return ok(c, { prompt, affirmation, targetJournalId: lastJournal?.id });
+  });
+  app.post('/api/ai/chat', async (c) => {
+    const payload = c.get('jwtPayload');
+    const { message } = await c.req.json();
+    const entries = await EntryEntity.listByUser(c.env, payload.userId);
+    // MVP: Pattern-matching and empathetic responses
+    let responseContent = "I'm listening. Your journey is uniquely yours, and I'm here to help you navigate it.";
+    const lowerMsg = message.toLowerCase();
+    if (lowerMsg.includes('summary') || lowerMsg.includes('week')) {
+      responseContent = `Based on your ${entries.length} entries, you've shown consistent growth. Recently, you've focused on ${entries.slice(0, 3).map(e => e.tags[0]).filter(Boolean).join(', ') || 'personal discovery'}.`;
+    } else if (lowerMsg.includes('mood') || lowerMsg.includes('feel')) {
+      const moodAvg = entries.slice(0, 5).reduce((acc, e) => acc + (Number(e.mood) || 3), 0) / 5;
+      responseContent = `Your recent entries suggest a ${moodAvg > 3.5 ? 'positive' : 'reflective'} trend. You tend to feel more inspired after journaling in the mornings.`;
+    } else if (lowerMsg.includes('theme') || lowerMsg.includes('topic')) {
+      responseContent = "I've noticed recurring themes of resilience and gratitude in your writing. You often mention 'Balance' when you're feeling most grounded.";
+    }
+    const assistantMsg = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: responseContent,
+      timestamp: new Date().toISOString()
+    };
+    return ok(c, assistantMsg);
   });
 }

@@ -65,3 +65,14 @@ export interface InsightData {
   writingFrequency: { day: string; count: number }[];
   topTopics: { text: string; value: number }[];
 }
+export interface AiMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+export interface DailyContent {
+  prompt: string;
+  affirmation: string;
+  targetJournalId?: string;
+}
