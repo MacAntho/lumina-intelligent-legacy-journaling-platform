@@ -69,7 +69,30 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.get('/api/journals/:id/entries', async (c) => {
     const payload = c.get('jwtPayload');
-    const entries = await EntryEntity.listByJournal(c.env, c.req.param('id'), payload.userId);
+    const journalId = c.req.param('id');
+    const q = c.req.query('q')?.toLowerCase();
+    const tag = c.req.query('tag');
+    const mood = c.req.query('mood');
+    const sort = c.req.query('sort') || 'desc';
+    let entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
+    if (q) {
+      entries = entries.filter(e => 
+        e.content.toLowerCase().includes(q) || 
+        e.title?.toLowerCase().includes(q) ||
+        e.tags?.some(t => t.toLowerCase().includes(q))
+      );
+    }
+    if (tag) {
+      entries = entries.filter(e => e.tags?.includes(tag));
+    }
+    if (mood) {
+      entries = entries.filter(e => e.mood === mood);
+    }
+    entries.sort((a, b) => {
+      const timeA = new Date(a.date).getTime();
+      const timeB = new Date(b.date).getTime();
+      return sort === 'asc' ? timeA - timeB : timeB - timeA;
+    });
     return ok(c, entries);
   });
   app.post('/api/journals/:id/entries', async (c) => {
@@ -80,7 +103,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       id: crypto.randomUUID(),
       userId: payload.userId,
       journalId: c.req.param('id'),
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      tags: body.tags || [],
+      images: body.images || [],
+      title: body.title || ''
     });
     const journal = new JournalEntity(c.env, c.req.param('id'));
     if (await journal.exists()) await journal.patch({ lastEntryAt: entry.date });

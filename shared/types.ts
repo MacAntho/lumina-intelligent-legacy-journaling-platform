@@ -44,10 +44,14 @@ export interface Entry {
   id: string;
   userId: string;
   journalId: string;
+  title?: string;
   content: string;
   structuredData?: Record<string, any>;
   date: string;
+  updatedAt?: string;
   mood: string;
+  tags: string[];
+  images: string[];
 }
 export interface LegacyContact {
   id: string;

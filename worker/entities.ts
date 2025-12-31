@@ -53,9 +53,12 @@ export class EntryEntity extends IndexedEntity<Entry> {
     id: "",
     userId: "",
     journalId: "",
+    title: "",
     content: "",
     date: "",
     mood: "Normal",
+    tags: [],
+    images: []
   };
   static async listByJournal(env: Env, journalId: string, userId: string): Promise<Entry[]> {
     const { items } = await this.list(env, null, 1000);

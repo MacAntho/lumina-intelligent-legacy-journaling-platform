@@ -8,6 +8,7 @@ interface AppState {
   isAuthenticated: boolean;
   journals: Journal[];
   entries: Entry[];
+  drafts: Record<string, Partial<Entry>>;
   legacyContacts: LegacyContact[];
   insightData: InsightData | null;
   isLoading: boolean;
@@ -18,10 +19,12 @@ interface AppState {
   register: (req: RegisterRequest) => Promise<void>;
   logout: () => void;
   updateProfile: (profile: Partial<User>) => Promise<void>;
-  fetchEntries: (journalId: string) => Promise<void>;
+  fetchEntries: (journalId: string, params?: string) => Promise<void>;
   addJournal: (journal: Partial<Journal>) => Promise<void>;
   deleteJournal: (id: string) => Promise<void>;
   addEntry: (entry: Partial<Entry>) => Promise<void>;
+  setDraft: (journalId: string, draft: Partial<Entry>) => void;
+  clearDraft: (journalId: string) => void;
   fetchInsights: () => Promise<void>;
   addLegacyContact: (contact: Partial<LegacyContact>) => Promise<void>;
   removeLegacyContact: (id: string) => Promise<void>;
@@ -32,13 +35,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   isAuthenticated: !!localStorage.getItem('lumina_token'),
   journals: [],
   entries: [],
+  drafts: JSON.parse(localStorage.getItem('lumina_drafts') || '{}'),
   legacyContacts: [],
   insightData: null,
   isLoading: false,
   isSaving: false,
   isInitialized: false,
   initialize: async () => {
-    const { token, isLoading, isInitialized } = get();
+    const token = get().token;
+    const isLoading = get().isLoading;
+    const isInitialized = get().isInitialized;
     if (!token || isLoading || isInitialized) return;
     set({ isLoading: true });
     try {
@@ -134,9 +140,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       toast.error('Update failed');
     }
   },
-  fetchEntries: async (journalId) => {
+  fetchEntries: async (journalId, params = '') => {
     try {
-      const entries = await api<Entry[]>(`/api/journals/${journalId}/entries`);
+      const url = `/api/journals/${journalId}/entries${params ? `?${params}` : ''}`;
+      const entries = await api<Entry[]>(url);
       set({ entries });
     } catch (error) {
       console.error('Fetch entries failed:', error);
@@ -178,10 +185,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         journals: state.journals.map(j => j.id === entry.journalId ? { ...j, lastEntryAt: entry.date } : j),
         isSaving: false
       }));
+      get().clearDraft(entry.journalId);
     } catch (error) {
       console.error('Add entry failed:', error);
       set({ isSaving: false });
     }
+  },
+  setDraft: (journalId, draft) => {
+    const currentDrafts = get().drafts;
+    const nextDrafts = { ...currentDrafts, [journalId]: draft };
+    set({ drafts: nextDrafts });
+    localStorage.setItem('lumina_drafts', JSON.stringify(nextDrafts));
+  },
+  clearDraft: (journalId) => {
+    const currentDrafts = get().drafts;
+    const { [journalId]: _, ...rest } = currentDrafts;
+    set({ drafts: rest });
+    localStorage.setItem('lumina_drafts', JSON.stringify(rest));
   },
   fetchInsights: async () => {
     try {
