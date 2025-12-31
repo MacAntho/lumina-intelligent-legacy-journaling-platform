@@ -16,6 +16,9 @@ import { Dashboard } from '@/pages/Dashboard'
 import { JournalDetail } from '@/pages/JournalDetail'
 import { Insights } from '@/pages/Insights'
 import { LegacySettings } from '@/pages/LegacySettings'
+import { AuthPage } from '@/pages/AuthPage'
+import { ProfilePage } from '@/pages/ProfilePage'
+import { AuthGuard } from '@/components/AuthGuard'
 const queryClient = new QueryClient();
 const router = createBrowserRouter([
   {
@@ -24,23 +27,33 @@ const router = createBrowserRouter([
     errorElement: <RouteErrorBoundary />,
   },
   {
+    path: "/auth",
+    element: <AuthPage />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
     path: "/dashboard",
-    element: <Dashboard />,
+    element: <AuthGuard><Dashboard /></AuthGuard>,
     errorElement: <RouteErrorBoundary />,
   },
   {
     path: "/journal/:id",
-    element: <JournalDetail />,
+    element: <AuthGuard><JournalDetail /></AuthGuard>,
     errorElement: <RouteErrorBoundary />,
   },
   {
     path: "/insights",
-    element: <Insights />,
+    element: <AuthGuard><Insights /></AuthGuard>,
     errorElement: <RouteErrorBoundary />,
   },
   {
     path: "/legacy",
-    element: <LegacySettings />,
+    element: <AuthGuard><LegacySettings /></AuthGuard>,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/profile",
+    element: <AuthGuard><ProfilePage /></AuthGuard>,
     errorElement: <RouteErrorBoundary />,
   }
 ]);

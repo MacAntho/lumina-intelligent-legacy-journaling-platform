@@ -4,13 +4,35 @@ export interface ApiResponse<T = unknown> {
   error?: string;
 }
 export type JournalType = 'reflective' | 'fitness' | 'gratitude' | 'legacy';
+export interface UserPreferences {
+  theme: 'light' | 'dark' | 'system';
+  notificationsEnabled: boolean;
+}
 export interface User {
   id: string;
   name: string;
   email: string;
+  bio?: string;
+  profileImage?: string;
+  preferences: UserPreferences;
+  createdAt: string;
+}
+export interface AuthResponse {
+  user: User;
+  token: string;
+}
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  name: string;
 }
 export interface Journal {
   id: string;
+  userId: string;
   title: string;
   description: string;
   type: JournalType;
@@ -19,6 +41,7 @@ export interface Journal {
 }
 export interface Entry {
   id: string;
+  userId: string;
   journalId: string;
   content: string;
   date: string;
@@ -26,6 +49,7 @@ export interface Entry {
 }
 export interface LegacyContact {
   id: string;
+  userId: string;
   name: string;
   email: string;
   status: 'pending' | 'verified';

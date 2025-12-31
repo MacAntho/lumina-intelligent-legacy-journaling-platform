@@ -6,9 +6,11 @@ import {
   Heart,
   Settings,
   PlusCircle,
-  Sparkles
+  Sparkles,
+  User as UserIcon,
+  LogOut
 } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/lib/store";
 import {
   Sidebar,
@@ -22,9 +24,17 @@ import {
   SidebarMenuButton,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 export function AppSidebar(): JSX.Element {
-  const journals = useAppStore((s) => s.journals);
+  const journals = useAppStore(s => s.journals);
+  const user = useAppStore(s => s.user);
+  const logout = useAppStore(s => s.logout);
   const location = useLocation();
+  const navigate = useNavigate();
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
   return (
     <Sidebar className="border-r border-stone-200 dark:border-stone-800">
       <SidebarHeader className="p-4">
@@ -93,18 +103,31 @@ export function AppSidebar(): JSX.Element {
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4">
+      <SidebarFooter className="p-4 space-y-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild className="w-full justify-start gap-3 bg-stone-100 dark:bg-stone-800/50 border border-stone-200 dark:border-stone-700 hover:bg-stone-200">
-              <Link to="/dashboard">
-                <PlusCircle className="size-4 text-stone-600" />
-                <span className="font-medium text-stone-900 dark:text-stone-100">Manage Hub</span>
+            <SidebarMenuButton asChild isActive={location.pathname === "/profile"} className="p-2 h-auto">
+              <Link to="/profile" className="flex items-center gap-3">
+                <Avatar className="h-8 w-8 rounded-lg">
+                  <AvatarImage src={user?.profileImage} />
+                  <AvatarFallback className="rounded-lg bg-stone-200 text-stone-600">
+                    {user?.name?.[0] || <UserIcon size={14} />}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col items-start text-xs">
+                  <span className="font-medium text-stone-900 dark:text-stone-100 truncate max-w-[120px]">{user?.name}</span>
+                  <span className="text-stone-400">View Profile</span>
+                </div>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild className="mt-2 text-stone-500">
+            <SidebarMenuButton onClick={handleLogout} className="text-stone-500 hover:text-red-500 transition-colors">
+              <LogOut className="size-4" /> <span>Sign Out</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild className="text-stone-500">
               <a href="#"><Settings className="size-4" /> <span>Settings</span></a>
             </SidebarMenuButton>
           </SidebarMenuItem>
