@@ -20,6 +20,7 @@ import { AuthPage } from '@/pages/AuthPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AIChat } from '@/pages/AIChat'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { PricingPage } from '@/pages/PricingPage'
 import { LegacyView } from '@/pages/LegacyView'
 import { ActivityPage } from '@/pages/ActivityPage'
 import { AuthGuard } from '@/components/AuthGuard'
@@ -87,6 +88,11 @@ const router = createBrowserRouter([
   {
     path: "/settings",
     element: <AuthGuard><SettingsPage /></AuthGuard>,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/pricing",
+    element: <AuthGuard><PricingPage /></AuthGuard>,
     errorElement: <RouteErrorBoundary />,
   },
   {

@@ -3,15 +3,22 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
 }
+export type SubscriptionTier = 'free' | 'premium' | 'pro';
+export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete';
 export type JournalType = 'reflective' | 'fitness' | 'gratitude' | 'legacy' | 'finance' | 'reading' | 'mood' | 'travel' | 'creative' | 'dreams' | 'meals';
 export type NotificationType = 'entry' | 'prompt' | 'affirmation' | 'share' | 'access' | 'insight' | 'export' | 'reminder' | 'limit' | 'activity';
 export type AnalysisRange = 'week' | 'month' | 'year' | 'all';
+export interface UsageStats {
+  journalCount: number;
+  monthlyEntryCount: number;
+  lastResetMonth: string; // YYYY-MM
+}
 export interface AiInsight {
   id: string;
   userId: string;
   journalId: string;
   range: AnalysisRange;
-  content: string; // The structured narrative
+  content: string;
   moodScore: number;
   topThemes: string[];
   goalsIdentified: string[];
@@ -29,31 +36,6 @@ export interface AppNotification {
   createdAt: string;
   metadata?: Record<string, any>;
 }
-export interface SecurityLog {
-  id: string;
-  userId: string;
-  event: 'login' | 'failed_login' | 'purge' | 'export' | 'password_reset' | 'e2e_enabled';
-  ip: string;
-  userAgent: string;
-  timestamp: string;
-}
-export interface SearchFilters {
-  dateRange?: { start: string; end: string };
-  moods?: string[];
-  minStars?: number;
-  templateIds?: string[];
-  hasImages?: boolean;
-  tags?: string[];
-  minWordCount?: number;
-}
-export interface SavedSearch {
-  id: string;
-  userId: string;
-  name: string;
-  query: string;
-  filters: SearchFilters;
-  createdAt: string;
-}
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'system';
   notificationsEnabled: boolean;
@@ -65,9 +47,12 @@ export interface UserPreferences {
   privacyLevel: 'standard' | 'high';
   onboardingCompleted: boolean;
   tourStep?: number;
+  tier: SubscriptionTier;
+  subscriptionStatus: SubscriptionStatus;
+  stripeCustomerId?: string;
   quietHours: {
-    start: string; // "HH:mm"
-    end: string;   // "HH:mm"
+    start: string;
+    end: string;
     enabled: boolean;
   };
 }
@@ -78,6 +63,7 @@ export interface User {
   bio?: string;
   profileImage?: string;
   preferences: UserPreferences;
+  usage: UsageStats;
   createdAt: string;
   lastHeartbeatAt?: string;
 }
@@ -165,15 +151,6 @@ export interface LegacyShare {
   permissions: LegacyPermissions;
   viewCount: number;
   createdAt: string;
-}
-export interface LegacyPublicData {
-  journalTitle: string;
-  authorName: string;
-  entries: Entry[];
-  permissions: LegacyPermissions;
-  passwordRequired: boolean;
-  passwordHint?: string;
-  expiresAt?: string;
 }
 export interface ExportOptions {
   title: string;

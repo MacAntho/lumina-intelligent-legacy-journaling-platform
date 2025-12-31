@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Settings, Moon, Bell, Shield, Download, Trash2, Loader2, Footprints, Database, AlertTriangle, RefreshCw, GraduationCap, Lock, Share2 } from 'lucide-react';
+import { Settings, Moon, Bell, Shield, Download, Trash2, Loader2, Footprints, Database, AlertTriangle, RefreshCw, GraduationCap, Lock, Share2, CreditCard, ExternalLink, Activity } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 export function SettingsPage() {
@@ -135,6 +135,35 @@ export function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+            <Card className="rounded-3xl border-stone-200 shadow-sm bg-white/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg font-serif"><CreditCard size={18} /> Subscription & Billing</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between p-4 rounded-2xl bg-stone-900 text-white">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Current Tier</p>
+                    <p className="text-lg font-serif">{user?.preferences?.tier?.toUpperCase() || 'FREE'}</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => navigate('/pricing')} className="rounded-xl h-8 text-[10px] font-bold border-stone-700 bg-transparent text-white hover:bg-stone-800">
+                    Change Plan
+                  </Button>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-stone-500">Billing Cycle</span>
+                    <span className="font-medium">Monthly</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-stone-500">Status</span>
+                    <span className="text-emerald-500 font-medium">Active</span>
+                  </div>
+                  <Button variant="ghost" className="w-full justify-start p-0 h-auto text-[10px] font-bold text-stone-400 uppercase tracking-widest hover:text-stone-900 transition-colors">
+                    Manage Billing Portal <ExternalLink size={10} className="ml-1" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
           <div className="space-y-8">
             <Card className="rounded-3xl border-stone-200 shadow-sm bg-white/50">
@@ -148,6 +177,22 @@ export function SettingsPage() {
                     checked={user?.preferences?.notificationsEnabled}
                     onCheckedChange={(val) => handlePreferenceChange('notificationsEnabled', val)}
                   />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-3xl border-stone-200 shadow-sm bg-white/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg font-serif"><Activity size={18} /> Usage Audit</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-stone-500">Monthly Reflections</span>
+                    <span className="font-bold">{user?.usage?.monthlyEntryCount || 0} / {user?.preferences?.tier === 'free' ? '100' : 'Unlimited'}</span>
+                  </div>
+                  <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-stone-900 rounded-full" style={{ width: `${Math.min(100, ((user?.usage?.monthlyEntryCount || 0) / (user?.preferences?.tier === 'free' ? 100 : 10000)) * 100)}%` }} />
+                  </div>
                 </div>
               </CardContent>
             </Card>

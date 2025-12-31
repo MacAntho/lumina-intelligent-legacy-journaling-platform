@@ -14,6 +14,7 @@ interface AppState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  isLimitReached: (type: 'journal' | 'entry') => boolean;
   journals: Journal[];
   entries: Entry[];
   journalInsights: AiInsight[];
@@ -42,6 +43,7 @@ interface AppState {
   resetPassword: (token: string, password: string) => Promise<void>;
   logout: () => void;
   deleteAccount: () => Promise<void>;
+  createCheckoutSession: (tier: SubscriptionTier) => Promise<void>;
   exportAllData: () => Promise<void>;
   heartbeat: () => Promise<void>;
   updateProfile: (profile: Partial<User>) => Promise<void>;
@@ -106,6 +108,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   isTourActive: false,
   tourStep: 0,
   initialize: async () => {
+    const stripeMock = new URLSearchParams(window.location.search).get('stripe_mock');
+    const mockTier = new URLSearchParams(window.location.search).get('tier') as SubscriptionTier;
+    if (stripeMock === 'success' && mockTier) {
+      await api('/api/auth/settings', { 
+        method: 'PUT', 
+        body: JSON.stringify({ preferences: { tier: mockTier } }) 
+      });
+      toast.success('Sanctuary Expanded! Welcome to ' + mockTier.toUpperCase());
+    }
     const token = get().token;
     if (!token || get().isInitialized || get().isLoading) return;
     set({ isLoading: true });
@@ -136,6 +147,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().logout();
       set({ isLoading: false, isInitialized: false });
     }
+  },
+  isLimitReached: (type) => {
+    const user = get().user;
+    if (!user) return true;
+    const tier = user.preferences.tier;
+    const limits = { free: { j: 3, e: 100 }, premium: { j: 1000, e: 10000 }, pro: { j: 10000, e: 100000 } };
+    const currentLimits = limits[tier];
+    if (type === 'journal') return user.usage.journalCount >= currentLimits.j;
+    return user.usage.monthlyEntryCount >= currentLimits.e;
   },
   heartbeat: async () => {
     if (!get().isAuthenticated) return;
@@ -190,6 +210,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       set({ isSaving: false });
       toast.error('Synchronization failed');
+    }
+  },
+  createCheckoutSession: async (tier) => {
+    try {
+      const res = await api<{ url: string }>('/api/stripe/create-checkout', { method: 'POST', body: JSON.stringify({ tier }) });
+      window.location.href = res.url;
+    } catch (e) {
+      toast.error('Payment gateway unavailable');
     }
   },
   fetchEntries: async (journalId, params = '') => {

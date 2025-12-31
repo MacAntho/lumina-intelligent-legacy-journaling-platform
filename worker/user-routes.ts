@@ -7,11 +7,11 @@ import {
   LegacyContactEntity, LegacyShareEntity, ExportLogEntity,
   LegacyAuditLogEntity, NotificationEntity,
   SavedSearchEntity, PromptEntity,
-  AiInsightEntity, SecurityLogEntity
+  AiInsightEntity, SecurityLogEntity, UsageEntity
 } from "./entities";
 import { chatWithAssistant, analyzeJournalPatterns } from "./intelligence";
 import { ok, bad, notFound } from './core-utils';
-import type { LoginRequest, RegisterRequest, DailyContent, User, AnalysisRange } from "@shared/types";
+import type { LoginRequest, RegisterRequest, DailyContent, User, AnalysisRange, SubscriptionTier } from "@shared/types";
 import { generateServerPdf } from "./pdf-service";
 const JWT_SECRET = "lumina-secret-key-change-this";
 async function hashPassword(password: string, salt: string) {
@@ -21,25 +21,115 @@ async function hashPassword(password: string, salt: string) {
   const exported = await crypto.subtle.exportKey("raw", key);
   return btoa(String.fromCharCode(...new Uint8Array(exported)));
 }
-const TEMPLATE_PROMPTS = [
-  { theme: 'growth', prompt: "In what way did you surprise yourself today?", affirmation: "I am constantly evolving." },
-  { theme: 'stillness', prompt: "Where did you find a moment of silence in the noise?", affirmation: "Peace is my natural state." },
-  { theme: 'gratitude', prompt: "Who is a person you've overlooked being thankful for?", affirmation: "My life is abundant." },
-  { theme: 'challenge', prompt: "What is one difficult thing you're avoiding right now?", affirmation: "I am courageous in the face of fear." },
-  { theme: 'creative', prompt: "If you had no constraints, what would you build today?", affirmation: "My imagination is a source of power." }
-];
-function generateDailyPrompt(recentContent: string): DailyContent {
-  const words = recentContent.toLowerCase().split(/\W+/);
-  let theme = 'growth';
-  if (words.includes('stress') || words.includes('busy')) theme = 'stillness';
-  if (words.includes('happy') || words.includes('thanks')) theme = 'gratitude';
-  if (words.includes('fear') || words.includes('hard')) theme = 'challenge';
-  if (words.includes('idea') || words.includes('art')) theme = 'creative';
-  const selection = TEMPLATE_PROMPTS.find(p => p.theme === theme) || TEMPLATE_PROMPTS[0];
-  return { prompt: selection.prompt, affirmation: selection.affirmation };
-}
+const LIMITS = {
+  free: { journals: 3, entriesPerMonth: 100 },
+  premium: { journals: 1000, entriesPerMonth: 10000 },
+  pro: { journals: 10000, entriesPerMonth: 100000 }
+};
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
-  // Public Access Routes
+  app.post('/api/auth/register', async (c) => {
+    const body = await c.req.json<RegisterRequest>();
+    if (!body.email || !body.password || !body.name) return bad(c, 'Missing fields');
+    const existing = await UserAuthEntity.findByEmail(c.env, body.email);
+    if (existing) return bad(c, 'User already exists');
+    const salt = crypto.randomUUID();
+    const hash = await hashPassword(body.password, salt);
+    const userId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const currentMonth = now.slice(0, 7);
+    const userAuth = await UserAuthEntity.create(c.env, {
+      id: body.email.toLowerCase(),
+      passwordHash: hash,
+      salt,
+      profile: {
+        id: userId,
+        name: body.name,
+        email: body.email.toLowerCase(),
+        preferences: {
+          theme: 'system',
+          notificationsEnabled: true,
+          language: 'en',
+          onboardingCompleted: false,
+          e2eEnabled: false,
+          analyticsOptIn: true,
+          privacyLevel: 'standard',
+          tier: 'free',
+          subscriptionStatus: 'active',
+          notificationSettings: {
+            entry: true, prompt: true, affirmation: true, share: true, access: true, insight: true, export: true, reminder: true, limit: true, activity: true
+          },
+          quietHours: { start: "22:00", end: "08:00", enabled: false }
+        },
+        usage: { journalCount: 0, monthlyEntryCount: 0, lastResetMonth: currentMonth },
+        createdAt: now,
+        lastHeartbeatAt: now
+      }
+    });
+    await UsageEntity.create(c.env, { id: userId, journalCount: 0, monthlyEntryCount: 0, lastResetMonth: currentMonth });
+    const token = await sign({ userId, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
+    return ok(c, { user: userAuth.profile, token });
+  });
+  app.post('/api/auth/login', async (c) => {
+    const body = await c.req.json<LoginRequest>();
+    const userAuth = await UserAuthEntity.findByEmail(c.env, body.email);
+    if (!userAuth) return bad(c, 'Invalid credentials');
+    const hash = await hashPassword(body.password, userAuth.salt);
+    if (hash !== userAuth.passwordHash) return bad(c, 'Invalid credentials');
+    const usage = await UsageEntity.getAndReset(c.env, userAuth.profile.id);
+    const updatedProfile = { ...userAuth.profile, lastHeartbeatAt: new Date().toISOString(), usage };
+    await new UserAuthEntity(c.env, body.email.toLowerCase()).patch({ profile: updatedProfile });
+    const token = await sign({ userId: userAuth.profile.id, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
+    return ok(c, { user: updatedProfile, token });
+  });
+  app.use('/api/*', jwt({ secret: JWT_SECRET }));
+  app.get('/api/auth/me', async (c) => {
+    const payload = c.get('jwtPayload');
+    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
+    if (!userAuth) return notFound(c);
+    const usage = await UsageEntity.getAndReset(c.env, userAuth.profile.id);
+    return ok(c, { ...userAuth.profile, usage });
+  });
+  app.post('/api/stripe/create-checkout', async (c) => {
+    const payload = c.get('jwtPayload');
+    const { tier } = await c.req.json();
+    console.log(`[STRIPE STUB] Creating checkout for user ${payload.userId} to tier ${tier}`);
+    return ok(c, { url: `${window.location.origin}/dashboard?stripe_mock=success&tier=${tier}` });
+  });
+  app.post('/api/journals', async (c) => {
+    const payload = c.get('jwtPayload');
+    const body = await c.req.json();
+    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
+    const tier = userAuth?.profile.preferences.tier || 'free';
+    const usage = await UsageEntity.getAndReset(c.env, payload.userId);
+    if (usage.journalCount >= LIMITS[tier].journals) {
+      return c.json({ success: false, error: 'Journal limit reached. Please upgrade to create more sanctuaries.' }, 403);
+    }
+    const journal = await JournalEntity.create(c.env, {
+      id: crypto.randomUUID(), userId: payload.userId, ...body, createdAt: new Date().toISOString()
+    });
+    await new UsageEntity(c.env, payload.userId).patch({ journalCount: usage.journalCount + 1 });
+    return ok(c, journal);
+  });
+  app.post('/api/journals/:id/entries', async (c) => {
+    const payload = c.get('jwtPayload');
+    const body = await c.req.json();
+    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
+    const tier = userAuth?.profile.preferences.tier || 'free';
+    const usage = await UsageEntity.getAndReset(c.env, payload.userId);
+    if (usage.monthlyEntryCount >= LIMITS[tier].entriesPerMonth) {
+      return c.json({ success: false, error: 'Monthly entry limit reached. Expand your sanctuary to keep writing.' }, 403);
+    }
+    const entry = await EntryEntity.create(c.env, {
+      id: crypto.randomUUID(), userId: payload.userId, journalId: c.req.param('id'),
+      ...body, date: new Date().toISOString()
+    });
+    await new UsageEntity(c.env, payload.userId).patch({ monthlyEntryCount: usage.monthlyEntryCount + 1 });
+    return ok(c, entry);
+  });
+  app.get('/api/journals/:id/entries', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await EntryEntity.listByJournal(c.env, c.req.param('id'), payload.userId));
+  });
   app.get('/api/public/legacy/:shareId', async (c) => {
     const shareId = c.req.param('shareId');
     const key = c.req.query('key');
@@ -62,338 +152,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     };
     return ok(c, data);
   });
-  app.post('/api/public/legacy/:shareId/verify', async (c) => {
-    const shareId = c.req.param('shareId');
-    const { password } = await c.req.json();
-    const inst = new LegacyShareEntity(c.env, shareId);
-    if (!(await inst.exists())) return notFound(c);
-    const share = await inst.getState();
-    const hash = await hashPassword(password, "legacy-salt");
-    if (hash !== share.passwordHash) return bad(c, 'Incorrect password');
-    const data = {
-      journalTitle: "Verified Journal",
-      authorName: 'Verified Author',
-      passwordRequired: false,
-      permissions: share.permissions,
-      entries: await EntryEntity.listByJournal(c.env, share.journalId, "public")
-    };
-    return ok(c, data);
-  });
-  // Auth Routes
-  app.post('/api/auth/register', async (c) => {
-    const body = await c.req.json<RegisterRequest>();
-    if (!body.email || !body.password || !body.name) return bad(c, 'Missing fields');
-    const existing = await UserAuthEntity.findByEmail(c.env, body.email);
-    if (existing) return bad(c, 'User already exists');
-    const salt = crypto.randomUUID();
-    const hash = await hashPassword(body.password, salt);
-    const userId = crypto.randomUUID();
-    const now = new Date().toISOString();
-    const userAuth = await UserAuthEntity.create(c.env, {
-      id: body.email.toLowerCase(), 
-      passwordHash: hash, 
-      salt,
-      profile: {
-        id: userId, 
-        name: body.name, 
-        email: body.email.toLowerCase(),
-        preferences: {
-          theme: 'system', 
-          notificationsEnabled: true, 
-          language: 'en', 
-          onboardingCompleted: false,
-          e2eEnabled: false,
-          analyticsOptIn: true,
-          privacyLevel: 'standard',
-          notificationSettings: {
-            entry: true, prompt: true, affirmation: true, share: true, access: true, insight: true, export: true, reminder: true, limit: true, activity: true
-          },
-          quietHours: { start: "22:00", end: "08:00", enabled: false }
-        },
-        createdAt: now, 
-        lastHeartbeatAt: now
-      }
-    });
-    const token = await sign({ userId, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
-    return ok(c, { user: userAuth.profile, token });
-  });
-  app.post('/api/auth/login', async (c) => {
-    const body = await c.req.json<LoginRequest>();
-    const userAuth = await UserAuthEntity.findByEmail(c.env, body.email);
-    if (!userAuth) return bad(c, 'Invalid credentials');
-    const hash = await hashPassword(body.password, userAuth.salt);
-    if (hash !== userAuth.passwordHash) return bad(c, 'Invalid credentials');
-    const updatedProfile = { ...userAuth.profile, lastHeartbeatAt: new Date().toISOString() };
-    await new UserAuthEntity(c.env, body.email.toLowerCase()).patch({ profile: updatedProfile });
-    const token = await sign({ userId: userAuth.profile.id, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
-    return ok(c, { user: updatedProfile, token });
-  });
-  // Protected Routes Middleware
-  app.use('/api/*', jwt({ secret: JWT_SECRET }));
-  // Security Auditor Middleware
-  app.use('/api/*', async (c, next) => {
-    const method = c.req.method;
-    if (['POST', 'PUT', 'DELETE'].includes(method)) {
-      const payload = c.get('jwtPayload');
-      if (payload?.userId) {
-        await SecurityLogEntity.create(c.env, {
-          id: crypto.randomUUID(),
-          userId: payload.userId,
-          event: method === 'DELETE' ? 'purge' : 'e2e_enabled', 
-          ip: c.req.header('cf-connecting-ip') || '0.0.0.0',
-          userAgent: c.req.header('user-agent') || 'unknown',
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-    await next();
-  });
-  app.get('/api/users/me/export-all', async (c) => {
-    const payload = c.get('jwtPayload');
-    const [journals, entries, contacts, searches] = await Promise.all([
-      JournalEntity.listByUser(c.env, payload.userId),
-      EntryEntity.listByUser(c.env, payload.userId),
-      LegacyContactEntity.listByUser(c.env, payload.userId),
-      SavedSearchEntity.listByUser(c.env, payload.userId)
-    ]);
-    return ok(c, { journals, entries, contacts, searches, exportedAt: new Date().toISOString() });
-  });
-  app.get('/api/auth/me', async (c) => {
-    const payload = c.get('jwtPayload');
-    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
-    return userAuth ? ok(c, userAuth.profile) : notFound(c);
-  });
-  app.put('/api/auth/settings', async (c) => {
-    const payload = c.get('jwtPayload');
-    const updates = await c.req.json<Partial<User>>();
-    const userAuth = new UserAuthEntity(c.env, payload.email);
-    const current = await userAuth.getState();
-    const updated = { ...current.profile, ...updates };
-    await userAuth.patch({ profile: updated });
-    return ok(c, updated);
-  });
-  app.put('/api/auth/heartbeat', async (c) => {
-    const payload = c.get('jwtPayload');
-    const userAuth = new UserAuthEntity(c.env, payload.email);
-    const current = await userAuth.getState();
-    const updated = { ...current.profile, lastHeartbeatAt: new Date().toISOString() };
-    await userAuth.patch({ profile: updated });
-    return ok(c, updated);
-  });
-  // AI Pattern Insights
-  app.get('/api/ai/insights/patterns', async (c) => {
-    const payload = c.get('jwtPayload');
-    const journalId = c.req.query('journalId');
-    const range = (c.req.query('range') || 'week') as AnalysisRange;
-    if (!journalId) return bad(c, 'Journal ID required');
-    const journal = new JournalEntity(c.env, journalId);
-    const journalState = await journal.getState();
-    if (journalState.userId !== payload.userId) return bad(c, 'Forbidden');
-    const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
-    const now = Date.now();
-    const msPerDay = 24 * 60 * 60 * 1000;
-    const ranges = { week: 7, month: 30, year: 365, all: 99999 };
-    const limit = (ranges[range as keyof typeof ranges] || 7) * msPerDay;
-    const filtered = entries.filter(e => now - new Date(e.date).getTime() < limit);
-    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
-    const analysis = await analyzeJournalPatterns(userAuth?.profile.name || 'Explorer', journalState.title, filtered, range);
-    const insight = await AiInsightEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: payload.userId, journalId, range,
-      ...analysis, createdAt: new Date().toISOString()
-    });
-    return ok(c, insight);
-  });
-  app.get('/api/ai/insights/history', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await AiInsightEntity.listByUser(c.env, payload.userId));
-  });
-  app.delete('/api/auth/me', async (c) => {
-    const payload = c.get('jwtPayload');
-    await UserAuthEntity.purgeAllUserData(c.env, payload.userId, payload.email);
-    return ok(c, { message: 'Sanctuary purged' });
-  });
-  // AI & Daily Routes
-  app.get('/api/ai/daily', async (c) => {
-    const payload = c.get('jwtPayload');
-    const refresh = c.req.query('refresh') === 'true';
-    const history = await PromptEntity.listByUser(c.env, payload.userId);
-    const todayPrompt = history.find(p => p.type === 'daily' && isSameDay(new Date(p.createdAt), new Date()));
-    if (todayPrompt && !refresh) return ok(c, todayPrompt);
-    const recentContent = await EntryEntity.getRecentEntriesContent(c.env, payload.userId);
-    const content = generateDailyPrompt(recentContent);
-    const journals = await JournalEntity.listByUser(c.env, payload.userId);
-    const newPrompt = await PromptEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: payload.userId, ...content,
-      targetJournalId: journals[0]?.id, type: 'daily', createdAt: new Date().toISOString()
-    });
-    return ok(c, newPrompt);
-  });
-  app.get('/api/ai/prompts/history', async (c) => {
-    const payload = c.get('jwtPayload');
-    const history = await PromptEntity.listByUser(c.env, payload.userId);
-    return ok(c, history.filter(p => p.type === 'daily').slice(0, 10));
-  });
-  app.post('/api/ai/prompts/contextual', async (c) => {
-    const payload = c.get('jwtPayload');
-    const { journalId } = await c.req.json();
-    const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
-    const content = entries.slice(0, 3).map(e => e.content).join("\n");
-    const suggestion = generateDailyPrompt(content);
-    return ok(c, suggestion);
-  });
-  // Journal & Entry CRUD
-  app.get('/api/journals', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await JournalEntity.listByUser(c.env, payload.userId));
-  });
-  app.post('/api/journals', async (c) => {
-    const payload = c.get('jwtPayload');
-    const body = await c.req.json();
-    const journal = await JournalEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: payload.userId, ...body, createdAt: new Date().toISOString()
-    });
-    return ok(c, journal);
-  });
-  app.delete('/api/journals/:id', async (c) => {
-    const payload = c.get('jwtPayload');
-    const id = c.req.param('id');
-    const journal = new JournalEntity(c.env, id);
-    const state = await journal.getState();
-    if (state.userId !== payload.userId) return bad(c, 'Forbidden');
-    await JournalEntity.delete(c.env, id);
-    return ok(c, { id });
-  });
-  app.get('/api/entries/all', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await EntryEntity.listByUser(c.env, payload.userId));
-  });
-  app.get('/api/journals/:id/entries', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await EntryEntity.listByJournal(c.req.param('id'), payload.userId));
-  });
-  app.post('/api/journals/:id/entries', async (c) => {
-    const payload = c.get('jwtPayload');
-    const body = await c.req.json();
-    const entry = await EntryEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: payload.userId, journalId: c.req.param('id'),
-      ...body, date: new Date().toISOString()
-    });
-    return ok(c, entry);
-  });
-  // Legacy circle & Transmissions
-  app.get('/api/legacy-contacts', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await LegacyContactEntity.listByUser(c.env, payload.userId));
-  });
-  app.post('/api/legacy-contacts', async (c) => {
-    const payload = c.get('jwtPayload');
-    const body = await c.req.json();
-    const contact = await LegacyContactEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: payload.userId, ...body, status: 'verified'
-    });
-    return ok(c, contact);
-  });
-  app.delete('/api/legacy-contacts/:id', async (c) => {
-    const payload = c.get('jwtPayload');
-    const id = c.req.param('id');
-    const contact = new LegacyContactEntity(c.env, id);
-    if ((await contact.getState()).userId !== payload.userId) return bad(c, 'Forbidden');
-    await LegacyContactEntity.delete(c.env, id);
-    return ok(c, { id });
-  });
-  app.post('/api/legacy/generate-link', async (c) => {
-    const payload = c.get('jwtPayload');
-    const body = await c.req.json();
-    const share = await LegacyShareEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: payload.userId, journalId: body.journalId,
-      recipientEmail: body.recipientEmail, accessKey: crypto.randomUUID(),
-      passwordHash: body.password ? await hashPassword(body.password, "legacy-salt") : undefined,
-      passwordHint: body.passwordHint, permissions: body.permissions,
-      viewCount: 0, createdAt: new Date().toISOString()
-    });
-    return ok(c, share);
-  });
-  app.get('/api/legacy/audit', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await LegacyAuditLogEntity.listByUser(c.env, payload.userId));
-  });
-  // Exports
-  app.get('/api/exports', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await ExportLogEntity.listByUser(c.env, payload.userId));
-  });
-  app.get('/api/export/pdf', async (c) => {
-    const payload = c.get('jwtPayload');
-    const journalId = c.req.query('journalId');
-    if (!journalId) return bad(c, 'Journal ID missing');
-    const journalInst = new JournalEntity(c.env, journalId);
-    const journal = await journalInst.getState();
-    if (journal.userId !== payload.userId) return bad(c, 'Unauthorized');
-    const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
-    const options = {
-      title: c.req.query('title') || journal.title,
-      author: c.req.query('author') || 'Lumina Author',
-      includeImages: c.req.query('images') === 'true',
-      includeTags: c.req.query('tags') === 'true',
-      customMessage: c.req.query('message') || '',
-      highContrast: c.req.query('contrast') === 'true',
-      startDate: c.req.query('start'),
-      endDate: c.req.query('end')
-    };
-    try {
-      const pdfBytes = await generateServerPdf(journal, entries, options);
-      return new Response(pdfBytes, {
-        headers: {
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="${journal.title.toLowerCase().replace(/\s+/g, '-')}-archive.pdf"`,
-          'Cache-Control': 'no-cache'
-        }
-      });
-    } catch (e) {
-      console.error('PDF Gen Error:', e);
-      return bad(c, 'Failed to generate archive');
-    }
-  });
-  app.post('/api/exports', async (c) => {
-    const payload = c.get('jwtPayload');
-    const body = await c.req.json();
-    const log = await ExportLogEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: payload.userId, ...body, timestamp: new Date().toISOString()
-    });
-    return ok(c, log);
-  });
-  // Notifications
-  app.get('/api/notifications', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await NotificationEntity.listByUser(c.env, payload.userId));
-  });
-  app.patch('/api/notifications/:id/read', async (c) => {
-    const id = c.req.param('id');
-    await new NotificationEntity(c.env, id).patch({ isRead: true });
-    return ok(c, { id });
-  });
-  app.post('/api/notifications/read-all', async (c) => {
-    const payload = c.get('jwtPayload');
-    await NotificationEntity.markAllAsRead(c.env, payload.userId);
-    return ok(c, { success: true });
-  });
-  // Search
-  app.get('/api/searches', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await SavedSearchEntity.listByUser(c.env, payload.userId));
-  });
-  app.post('/api/searches', async (c) => {
-    const payload = c.get('jwtPayload');
-    const body = await c.req.json();
-    const s = await SavedSearchEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: payload.userId, ...body, createdAt: new Date().toISOString()
-    });
-    return ok(c, s);
-  });
-  app.get('/api/search/suggestions', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await EntryEntity.getSuggestions(c.env, payload.userId));
-  });
   app.get('/api/activity/stream', async (c) => {
     const payload = c.get('jwtPayload');
     const [exports, audits, prompts] = await Promise.all([
@@ -407,13 +165,5 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       ...prompts.map(p => ({ id: p.id, type: 'system' as const, title: 'Daily Prompt', message: p.prompt, timestamp: p.createdAt }))
     ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     return ok(c, stream.slice(0, 50));
-  });
-  app.post('/api/ai/chat', async (c) => {
-    const payload = c.get('jwtPayload');
-    const { message, history } = await c.req.json();
-    const entries = await EntryEntity.listByUser(c.env, payload.userId);
-    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
-    const response = await chatWithAssistant(userAuth?.profile.name || 'Explorer', message, history, entries.slice(0, 30));
-    return ok(c, response);
   });
 }

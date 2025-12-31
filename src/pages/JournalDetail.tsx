@@ -16,6 +16,7 @@ import { JOURNAL_TEMPLATES } from '@shared/templates';
 import { ExportDialog } from '@/components/ExportDialog';
 import { AdvancedSearch } from '@/components/AdvancedSearch';
 import { cn } from '@/lib/utils';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import type { Entry, DailyContent } from '@shared/types';
 export function JournalDetail() {
   const { id } = useParams();
@@ -26,11 +27,14 @@ export function JournalDetail() {
   const setDraft = useAppStore(s => s.setDraft);
   const isSaving = useAppStore(s => s.isSaving);
   const fetchEntries = useAppStore(s => s.fetchEntries);
+  const isLimitReached = useAppStore(s => s.isLimitReached);
   const generateContextualPrompt = useAppStore(s => s.generateContextualPrompt);
+  const user = useAppStore(s => s.user);
   const journal = journals.find(j => j.id === id);
   const template = JOURNAL_TEMPLATES.find(t => t.id === journal?.templateId) || JOURNAL_TEMPLATES[0];
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [title, setTitle] = useState('');
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [focusMode, setFocusMode] = useState(false);
   const [filteredEntries, setFilteredEntries] = useState<Entry[]>([]);
@@ -71,6 +75,11 @@ export function JournalDetail() {
   }, [formData, title]);
   const handleSave = async () => {
     if (!id) return;
+    if (isLimitReached('entry')) {
+      setUpgradeModalOpen(true);
+      return;
+    }
+
     const summaryParts = template.fields.map(field => {
       const val = formData[field.id];
       if (!val) return null;
@@ -116,6 +125,9 @@ export function JournalDetail() {
   }, [filteredEntries]);
   if (!journal) return <AppLayout container><Loader2 className="animate-spin" /></AppLayout>;
   const IconComponent = (LucideIcons as any)[template.icon] || Book;
+  const currentTier = user?.preferences?.tier || 'free';
+  const usage = user?.usage;
+
   return (
     <AppLayout className={cn(focusMode && "sidebar-hidden")} container={!focusMode}>
       <div className={cn("max-w-4xl mx-auto px-6 py-12 transition-all", focusMode && "max-w-2xl pt-24")}>
@@ -227,7 +239,12 @@ export function JournalDetail() {
               </div>
             ))}
             <div className="pt-8 border-t border-stone-50 flex items-center justify-between">
-              <span className="text-[10px] text-stone-300 font-serif italic">Auto-syncing to your private moat...</span>
+              <div className="flex flex-col">
+                <span className="text-[10px] text-stone-300 font-serif italic">Auto-syncing to your private moat...</span>
+                {currentTier === 'free' && usage && (
+                  <span className="text-[9px] text-stone-400 font-bold uppercase mt-1">{usage.monthlyEntryCount}/100 reflections this month</span>
+                )}
+              </div>
               <Button onClick={handleSave} disabled={isSaving || wordCount < 1} className="rounded-full bg-stone-900 text-white px-10 h-12 shadow-lg hover:scale-105 transition-transform">
                 {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Send size={16} className="mr-2" />}
                 Preserve Reflection
@@ -275,6 +292,7 @@ export function JournalDetail() {
         )}
       </div>
       {journal && <ExportDialog open={exportOpen} onOpenChange={setExportOpen} journal={journal} entries={entries} />}
+      <UpgradeModal open={upgradeModalOpen} onOpenChange={setUpgradeModalOpen} title="Continuous Growth" description="You've reached your monthly entry limit. Upgrade to continue your journey of reflection without pause." />
     </AppLayout>
   );
 }

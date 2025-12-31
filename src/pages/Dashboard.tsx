@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { AdvancedSearch } from '@/components/AdvancedSearch';
 import type { Journal } from '@shared/types';
+import { UpgradeModal } from '@/components/UpgradeModal';
 export function Dashboard() {
   const journals = useAppStore(s => s.journals);
   const entries = useAppStore(s => s.entries);
@@ -30,9 +31,11 @@ export function Dashboard() {
   const fetchPromptHistory = useAppStore(s => s.fetchPromptHistory);
   const addJournal = useAppStore(s => s.addJournal);
   const deleteJournal = useAppStore(s => s.deleteJournal);
+  const isLimitReached = useAppStore(s => s.isLimitReached);
   const navigate = useNavigate();
   const [filteredJournals, setFilteredJournals] = useState<Journal[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [step, setStep] = useState<'template' | 'config'>('template');
   const [selectedTemplate, setSelectedTemplate] = useState<JournalTemplate>(JOURNAL_TEMPLATES[0]);
   const [customTitle, setCustomTitle] = useState('');
@@ -57,6 +60,13 @@ export function Dashboard() {
   useEffect(() => {
     setFilteredJournals(journals);
   }, [journals]);
+  const handleOpenCreate = () => {
+    if (isLimitReached('journal')) {
+      setUpgradeModalOpen(true);
+    } else {
+      setIsCreateOpen(true);
+    }
+  };
   const handleCreate = async () => {
     await addJournal({
       title: customTitle || selectedTemplate.defaultTitle,
@@ -83,6 +93,7 @@ export function Dashboard() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const firstName = user?.name?.split(' ')[0] ?? 'Explorer';
+  const currentTier = user?.preferences?.tier || 'free';
   return (
     <AppLayout container>
       <div className="space-y-12 max-w-7xl mx-auto">
@@ -98,15 +109,18 @@ export function Dashboard() {
                   <Flame size={14} className="fill-current" /> {streak} Day Streak
                 </div>
               )}
+              {currentTier !== 'free' && (
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-stone-900 text-white rounded-full text-[8px] font-bold uppercase tracking-widest border border-stone-800">
+                  <ShieldCheck size={10} className="text-amber-400" /> {currentTier}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex gap-3">
             <Dialog open={isCreateOpen} onOpenChange={(o) => { setIsCreateOpen(o); if(!o) setStep('template'); }}>
-              <DialogTrigger asChild>
-                <Button id="tour-new-journal" className="rounded-full bg-stone-900 hover:bg-stone-800 text-white px-6 gap-2 transition-all hover:scale-105 shadow-xl shadow-stone-200">
-                  <Plus size={18} /> New Journal
-                </Button>
-              </DialogTrigger>
+              <Button id="tour-new-journal" onClick={handleOpenCreate} className="rounded-full bg-stone-900 hover:bg-stone-800 text-white px-6 gap-2 transition-all hover:scale-105 shadow-xl shadow-stone-200">
+              <Plus size={18} /> New Journal
+            </Button>
               <DialogContent className="rounded-3xl sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
                 <AnimatePresence mode="wait">
                   {step === 'template' ? (
@@ -296,6 +310,7 @@ export function Dashboard() {
           </div>
         )}
       </div>
+      <UpgradeModal open={upgradeModalOpen} onOpenChange={setUpgradeModalOpen} title="Expand Your Horizon" description="You've reached the limit of free sanctuaries. Upgrade to Premium for unlimited growth." />
     </AppLayout>
   );
 }
