@@ -21,14 +21,19 @@ import { ProfilePage } from '@/pages/ProfilePage'
 import { AIChat } from '@/pages/AIChat'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { LegacyView } from '@/pages/LegacyView'
+import { ActivityPage } from '@/pages/ActivityPage'
 import { AuthGuard } from '@/components/AuthGuard'
 // PWA Registration & Permissions
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then(registration => {
-      console.log('Lumina PWA: ServiceWorker registered with scope: ', registration.scope);
-    }, err => {
-      console.log('Lumina PWA: ServiceWorker registration failed: ', err);
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      if (registrations.length === 0) {
+        navigator.serviceWorker.register('/sw.js').then(registration => {
+          console.log('Lumina PWA: ServiceWorker registered with scope: ', registration.scope);
+        }).catch(err => {
+          console.log('Lumina PWA: ServiceWorker registration failed: ', err);
+        });
+      }
     });
   });
 }
@@ -62,6 +67,11 @@ const router = createBrowserRouter([
   {
     path: "/legacy",
     element: <AuthGuard><LegacySettings /></AuthGuard>,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/activity",
+    element: <AuthGuard><ActivityPage /></AuthGuard>,
     errorElement: <RouteErrorBoundary />,
   },
   {

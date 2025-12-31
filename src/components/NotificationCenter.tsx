@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { 
-  Bell, Check, Trash2, Shield, Share2, FileDown, 
+import { useNavigate } from 'react-router-dom';
+import {
+  Bell, Check, Trash2, Shield, Share2, FileDown,
   Sparkles, MessageCircle, AlertCircle, Info, Zap
 } from 'lucide-react';
-import { 
-  Popover, PopoverContent, PopoverTrigger 
+import {
+  Popover, PopoverContent, PopoverTrigger
 } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -19,6 +20,8 @@ export function NotificationCenter() {
   const markRead = useAppStore(s => s.markNotificationRead);
   const markAllRead = useAppStore(s => s.markAllNotificationsRead);
   const deleteNote = useAppStore(s => s.deleteNotification);
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
   const getIcon = (type: string) => {
     switch (type) {
       case 'access': return <Shield className="size-4 text-rose-500" />;
@@ -31,8 +34,12 @@ export function NotificationCenter() {
       default: return <Info className="size-4 text-stone-400" />;
     }
   };
+  const handleViewAll = () => {
+    setOpen(false);
+    navigate('/activity');
+  };
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative hover:bg-stone-100 rounded-full">
           <Bell className="size-5 text-stone-600" />
@@ -47,9 +54,9 @@ export function NotificationCenter() {
         <div className="flex items-center justify-between px-4 py-3 border-b border-stone-50">
           <h3 className="text-xs font-bold uppercase tracking-widest text-stone-400">Notifications</h3>
           {unreadCount > 0 && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               className="h-auto p-0 text-[10px] text-stone-500 hover:text-stone-900"
               onClick={markAllRead}
             >
@@ -97,14 +104,14 @@ export function NotificationCenter() {
                       </p>
                       <div className="flex items-center gap-3 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         {!n.isRead && (
-                          <button 
+                          <button
                             onClick={() => markRead(n.id)}
                             className="text-[9px] font-bold text-stone-400 hover:text-stone-900 uppercase tracking-tighter"
                           >
                             Mark as Read
                           </button>
                         )}
-                        <button 
+                        <button
                           onClick={() => deleteNote(n.id)}
                           className="text-[9px] font-bold text-stone-400 hover:text-red-500 uppercase tracking-tighter"
                         >
@@ -122,7 +129,11 @@ export function NotificationCenter() {
           </div>
         </ScrollArea>
         <div className="p-2 border-t border-stone-50 bg-stone-50/30">
-          <Button variant="ghost" className="w-full h-8 text-[10px] text-stone-400 uppercase tracking-widest hover:bg-stone-100">
+          <Button 
+            variant="ghost" 
+            className="w-full h-8 text-[10px] text-stone-400 uppercase tracking-widest hover:bg-stone-100"
+            onClick={handleViewAll}
+          >
             View All Activity
           </Button>
         </div>

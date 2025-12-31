@@ -18,7 +18,6 @@ async function hashPassword(password: string, salt: string) {
   return btoa(String.fromCharCode(...new Uint8Array(exported)));
 }
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
-  // Public Auth Routes
   app.post('/api/auth/register', async (c) => {
     const body = await c.req.json<RegisterRequest>();
     if (!body.email || !body.password || !body.name) return bad(c, 'Missing fields');
@@ -35,9 +34,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         id: userId,
         name: body.name,
         email: body.email.toLowerCase(),
-        preferences: { 
-          theme: 'system', 
-          notificationsEnabled: true, 
+        preferences: {
+          theme: 'system',
+          notificationsEnabled: true,
           language: 'en',
           notificationSettings: {
             entry: true, prompt: true, affirmation: true, share: true, access: true, insight: true, export: true, reminder: true, limit: true, activity: true
@@ -62,7 +61,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const token = await sign({ userId: userAuth.profile.id, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
     return ok(c, { user: updatedProfile, token });
   });
-  // Public Legacy Routes (Excluded from JWT Middleware)
   app.get('/api/public/legacy/:shareId', async (c) => {
     const shareId = c.req.param('shareId');
     const key = c.req.query('key');
@@ -80,9 +78,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       passwordHint: share.passwordHint,
       expiresAt: share.expiresAt
     };
-    if (passwordRequired) {
-      return ok(c, metadata);
-    }
+    if (passwordRequired) return ok(c, metadata);
     await LegacyAuditLogEntity.create(c.env, {
       id: crypto.randomUUID(),
       userId: share.userId,
@@ -124,25 +120,23 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       action: 'view',
       timestamp: new Date().toISOString()
     });
-    await NotificationEntity.create(c.env, {
-      id: crypto.randomUUID(),
-      userId: share.userId,
-      type: 'access',
-      title: 'Legacy Archive Unlocked',
-      message: `The password barrier for your journal "${journal.title}" was successfully bypassed by a recipient.`,
-      isRead: false,
-      createdAt: new Date().toISOString()
-    });
     const entries = await EntryEntity.listByJournal(c.env, share.journalId, share.userId);
-    return ok(c, {
-      journalTitle: journal.title,
-      authorName: "A Lumina Resident",
-      entries: entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-      permissions: share.permissions
-    });
+    return ok(c, { journalTitle: journal.title, authorName: "A Lumina Resident", entries, permissions: share.permissions });
   });
-  // Protected Routes Middleware
   app.use('/api/*', jwt({ secret: JWT_SECRET }));
+  app.get('/api/activity/stream', async (c) => {
+    const payload = c.get('jwtPayload');
+    const userId = payload.userId;
+    const notes = await NotificationEntity.listByUser(c.env, userId);
+    const audits = await LegacyAuditLogEntity.listByUser(c.env, userId);
+    const exports = await ExportLogEntity.listByUser(c.env, userId);
+    const stream: any[] = [
+      ...notes.map(n => ({ id: n.id, type: 'system' as const, title: n.title, message: n.message, timestamp: n.createdAt })),
+      ...audits.map(a => ({ id: a.id, type: 'security' as const, title: 'Transmission Access', message: `${a.action.toUpperCase()} by ${a.recipientEmail}`, timestamp: a.timestamp, metadata: { action: a.action, email: a.recipientEmail } })),
+      ...exports.map(e => ({ id: e.id, type: 'export' as const, title: 'Journal Export', message: `Exported to ${e.format.toUpperCase()} (${e.status})`, timestamp: e.timestamp, metadata: { format: e.format, status: e.status } }))
+    ];
+    return ok(c, stream.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 50));
+  });
   app.get('/api/notifications', async (c) => {
     const payload = c.get('jwtPayload');
     return ok(c, await NotificationEntity.listByUser(c.env, payload.userId));
@@ -234,60 +228,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     }));
     const tagMap: Record<string, number> = {};
     entries.slice(-50).forEach(e => {
-      e.tags?.forEach(tag => {
-        tagMap[tag] = (tagMap[tag] || 0) + 1;
-      });
+      e.tags?.forEach(tag => { tagMap[tag] = (tagMap[tag] || 0) + 1; });
     });
-    const topTopics = Object.entries(tagMap)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([text, count]) => ({
-        text,
-        value: Math.round((count / Math.max(1, entries.length)) * 100)
-      }));
-    if (topTopics.length === 0) topTopics.push({ text: 'Discovery', value: 100 });
-    return ok(c, {
-      moodTrends,
-      writingFrequency: Object.entries(frequency).map(([day, count]) => ({ day, count })),
-      topTopics
-    });
-  });
-  app.get('/api/ai/daily', async (c) => {
-    const payload = c.get('jwtPayload');
-    const journals = await JournalEntity.listByUser(c.env, payload.userId);
-    const lastJournal = journals[0];
-    let prompt = "How did you find stillness today?";
-    let affirmation = "I am growing through my reflections.";
-    if (lastJournal?.templateId === 'fitness') {
-      prompt = "Reflect on how your body feels after movement. What did it teach you about your limits?";
-      affirmation = "My body is a capable vessel for my spirit.";
-    } else if (lastJournal?.templateId === 'gratitude') {
-      prompt = "What's one thing that happened today that you didn't expect, but are thankful for?";
-      affirmation = "I see beauty in the unexpected small moments.";
-    }
-    return ok(c, { prompt, affirmation, targetJournalId: lastJournal?.id });
-  });
-  app.post('/api/ai/chat', async (c) => {
-    const payload = c.get('jwtPayload');
-    const { message } = await c.req.json();
-    const entries = await EntryEntity.listByUser(c.env, payload.userId);
-    let responseContent = "I'm listening. Your journey is uniquely yours, and I'm here to help you navigate it.";
-    const lowerMsg = message.toLowerCase();
-    if (lowerMsg.includes('summary') || lowerMsg.includes('week')) {
-      responseContent = `Based on your ${entries.length} entries, you've shown consistent growth. Recently, you've focused on ${entries.slice(0, 3).map(e => e.tags[0]).filter(Boolean).join(', ') || 'personal discovery'}.`;
-    } else if (lowerMsg.includes('mood') || lowerMsg.includes('feel')) {
-      const moodAvg = entries.slice(0, 5).reduce((acc, e) => acc + (Number(e.mood) || 3), 0) / 5;
-      responseContent = `Your recent entries suggest a ${moodAvg > 3.5 ? 'positive' : 'reflective'} trend. You tend to feel more inspired after journaling in the mornings.`;
-    } else if (lowerMsg.includes('theme') || lowerMsg.includes('topic')) {
-      responseContent = "I've noticed recurring themes of resilience and gratitude in your writing. You often mention 'Balance' when you're feeling most grounded.";
-    }
-    const assistantMsg = {
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      content: responseContent,
-      timestamp: new Date().toISOString()
-    };
-    return ok(c, assistantMsg);
+    const topTopics = Object.entries(tagMap).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([text, count]) => ({ text, value: Math.round((count / Math.max(1, entries.length)) * 100) }));
+    return ok(c, { moodTrends, writingFrequency: Object.entries(frequency).map(([day, count]) => ({ day, count })), topTopics });
   });
   app.put('/api/auth/settings', async (c) => {
     const payload = c.get('jwtPayload');
@@ -306,44 +250,15 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     let passwordHash: string | undefined;
     if (password) passwordHash = await hashPassword(password, "legacy-salt");
     const expiresAt = expiryDays > 0 ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString() : undefined;
-    const share = await LegacyShareEntity.create(c.env, {
-      id: shareId,
-      journalId,
-      userId: payload.userId,
-      recipientEmail,
-      accessKey,
-      permissions,
-      passwordHash,
-      passwordHint,
-      expiresAt,
-      viewCount: 0,
-      createdAt: new Date().toISOString()
-    });
+    const share = await LegacyShareEntity.create(c.env, { id: shareId, journalId, userId: payload.userId, recipientEmail, accessKey, permissions, passwordHash, passwordHint, expiresAt, viewCount: 0, createdAt: new Date().toISOString() });
     const journal = await new JournalEntity(c.env, journalId).getState();
-    await NotificationEntity.create(c.env, {
-      id: crypto.randomUUID(),
-      userId: payload.userId,
-      type: 'share',
-      title: 'Legacy Link Generated',
-      message: `A secure link for "${journal.title}" was created for ${recipientEmail}.`,
-      isRead: false,
-      createdAt: new Date().toISOString()
-    });
-    await LegacyAuditLogEntity.create(c.env, {
-      id: crypto.randomUUID(),
-      userId: payload.userId,
-      shareId,
-      journalId,
-      recipientEmail,
-      action: 'create',
-      timestamp: new Date().toISOString()
-    });
+    await NotificationEntity.create(c.env, { id: crypto.randomUUID(), userId: payload.userId, type: 'share', title: 'Legacy Link Generated', message: `Archive for "${journal.title}" created.`, isRead: false, createdAt: new Date().toISOString() });
+    await LegacyAuditLogEntity.create(c.env, { id: crypto.randomUUID(), userId: payload.userId, shareId, journalId, recipientEmail, action: 'create', timestamp: new Date().toISOString() });
     return ok(c, share);
   });
   app.get('/api/legacy/audit', async (c) => {
     const payload = c.get('jwtPayload');
-    const logs = await LegacyAuditLogEntity.listByUser(c.env, payload.userId);
-    return ok(c, logs);
+    return ok(c, await LegacyAuditLogEntity.listByUser(c.env, payload.userId));
   });
   app.get('/api/legacy-contacts', async (c) => {
     const payload = c.get('jwtPayload');
@@ -352,13 +267,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.post('/api/legacy-contacts', async (c) => {
     const payload = c.get('jwtPayload');
     const body = await c.req.json();
-    const contact = await LegacyContactEntity.create(c.env, {
-      ...body,
-      id: crypto.randomUUID(),
-      userId: payload.userId,
-      status: 'pending',
-      assignedJournalIds: []
-    });
+    const contact = await LegacyContactEntity.create(c.env, { ...body, id: crypto.randomUUID(), userId: payload.userId, status: 'pending', assignedJournalIds: [] });
     return ok(c, contact);
   });
   app.delete('/api/legacy-contacts/:id', async (c) => {
@@ -368,28 +277,14 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.get('/api/exports', async (c) => {
     const payload = c.get('jwtPayload');
-    const logs = await ExportLogEntity.listByUser(c.env, payload.userId);
-    return ok(c, logs);
+    return ok(c, await ExportLogEntity.listByUser(c.env, payload.userId));
   });
   app.post('/api/exports', async (c) => {
     const payload = c.get('jwtPayload');
     const body = await c.req.json();
-    const log = await ExportLogEntity.create(c.env, {
-      ...body,
-      id: crypto.randomUUID(),
-      userId: payload.userId,
-      timestamp: new Date().toISOString()
-    });
+    const log = await ExportLogEntity.create(c.env, { ...body, id: crypto.randomUUID(), userId: payload.userId, timestamp: new Date().toISOString() });
     const journal = await new JournalEntity(c.env, body.journalId).getState();
-    await NotificationEntity.create(c.env, {
-      id: crypto.randomUUID(),
-      userId: payload.userId,
-      type: 'export',
-      title: 'Archive Exported',
-      message: `Your journal "${journal.title}" has been successfully exported to PDF.`,
-      isRead: false,
-      createdAt: new Date().toISOString()
-    });
+    await NotificationEntity.create(c.env, { id: crypto.randomUUID(), userId: payload.userId, type: 'export', title: 'Archive Exported', message: `"${journal.title}" exported to PDF.`, isRead: false, createdAt: new Date().toISOString() });
     return ok(c, log);
   });
 }

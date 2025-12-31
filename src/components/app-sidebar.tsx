@@ -8,7 +8,8 @@ import {
   Sparkles,
   User as UserIcon,
   LogOut,
-  BrainCircuit
+  BrainCircuit,
+  History
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/lib/store";
@@ -28,7 +29,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { NotificationCenter } from "@/components/NotificationCenter";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 export function AppSidebar(): JSX.Element {
   const journals = useAppStore(s => s.journals);
   const user = useAppStore(s => s.user);
@@ -125,6 +126,14 @@ export function AppSidebar(): JSX.Element {
                 <Link to="/legacy">
                   <Heart className="size-4" />
                   <span>Legacy Plan</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={location.pathname === "/activity"}>
+                <Link to="/activity">
+                  <History className="size-4" />
+                  <span>Activity Log</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

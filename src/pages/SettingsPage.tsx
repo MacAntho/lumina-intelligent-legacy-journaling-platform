@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Settings, Moon, Globe, Bell, Shield, Download, Trash2, Loader2, Sparkles, Share2, FileDown } from 'lucide-react';
+import { Settings, Moon, Globe, Bell, Shield, Download, Trash2, Loader2, Sparkles, Share2, FileDown, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 export function SettingsPage() {
   const user = useAppStore(s => s.user);
@@ -22,6 +22,17 @@ export function SettingsPage() {
     if (!user) return;
     const newSettings = { ...user.preferences.notificationSettings, [type]: value };
     await handlePreferenceChange('notificationSettings', newSettings);
+  };
+  const handleRecoverManifest = () => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (let registration of registrations) {
+          registration.unregister();
+        }
+        window.location.reload();
+      });
+      toast.success('PWA Manifest reset initiated.');
+    }
   };
   const hours = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`);
   return (
@@ -93,17 +104,16 @@ export function SettingsPage() {
                     onCheckedChange={(val) => handlePreferenceChange('notificationsEnabled', val)}
                   />
                 </div>
-                <div className="pt-4 border-t border-stone-100 space-y-4">
+                <div className="pt-6 border-t border-stone-100 space-y-5">
                   <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Granular Toggles</Label>
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-xs">
                         <Share2 size={14} className="text-stone-400" />
                         <span>Legacy Share Creation</span>
                       </div>
-                      <Switch 
-                        size="sm" 
-                        checked={user?.preferences?.notificationSettings?.share} 
+                      <Switch
+                        checked={user?.preferences?.notificationSettings?.share}
                         onCheckedChange={(v) => handleNotificationTypeToggle('share', v)}
                       />
                     </div>
@@ -112,9 +122,8 @@ export function SettingsPage() {
                         <Shield size={14} className="text-stone-400" />
                         <span>Legacy Access Alerts</span>
                       </div>
-                      <Switch 
-                        size="sm" 
-                        checked={user?.preferences?.notificationSettings?.access} 
+                      <Switch
+                        checked={user?.preferences?.notificationSettings?.access}
                         onCheckedChange={(v) => handleNotificationTypeToggle('access', v)}
                       />
                     </div>
@@ -123,9 +132,8 @@ export function SettingsPage() {
                         <Sparkles size={14} className="text-stone-400" />
                         <span>AI Insights & Prompts</span>
                       </div>
-                      <Switch 
-                        size="sm" 
-                        checked={user?.preferences?.notificationSettings?.insight} 
+                      <Switch
+                        checked={user?.preferences?.notificationSettings?.insight}
                         onCheckedChange={(v) => handleNotificationTypeToggle('insight', v)}
                       />
                     </div>
@@ -134,33 +142,31 @@ export function SettingsPage() {
                         <FileDown size={14} className="text-stone-400" />
                         <span>Export Completions</span>
                       </div>
-                      <Switch 
-                        size="sm" 
-                        checked={user?.preferences?.notificationSettings?.export} 
+                      <Switch
+                        checked={user?.preferences?.notificationSettings?.export}
                         onCheckedChange={(v) => handleNotificationTypeToggle('export', v)}
                       />
                     </div>
                   </div>
                 </div>
-                <div className="pt-4 border-t border-stone-100 space-y-3">
+                <div className="pt-6 border-t border-stone-100 space-y-4">
                    <div className="flex items-center justify-between">
                     <Label className="text-xs">Quiet Hours</Label>
-                    <Switch 
-                      size="sm" 
+                    <Switch
                       checked={user?.preferences?.quietHours?.enabled}
                       onCheckedChange={(v) => handlePreferenceChange('quietHours', { ...user?.preferences?.quietHours, enabled: v })}
                     />
                   </div>
                   {user?.preferences?.quietHours?.enabled && (
                     <div className="grid grid-cols-2 gap-4">
-                      <Select 
+                      <Select
                         value={user?.preferences?.quietHours?.start}
                         onValueChange={(v) => handlePreferenceChange('quietHours', { ...user?.preferences?.quietHours, start: v })}
                       >
                         <SelectTrigger className="rounded-xl h-8 text-xs"><SelectValue placeholder="Start" /></SelectTrigger>
                         <SelectContent>{hours.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
                       </Select>
-                      <Select 
+                      <Select
                         value={user?.preferences?.quietHours?.end}
                         onValueChange={(v) => handlePreferenceChange('quietHours', { ...user?.preferences?.quietHours, end: v })}
                       >
@@ -181,6 +187,9 @@ export function SettingsPage() {
               <CardContent className="space-y-4">
                 <Button variant="outline" className="w-full justify-start gap-2 rounded-xl">
                   <Download size={16} /> Export All Journals (.json)
+                </Button>
+                <Button variant="outline" onClick={handleRecoverManifest} className="w-full justify-start gap-2 rounded-xl">
+                  <RefreshCw size={16} /> Manifest Recovery
                 </Button>
                 <Button variant="outline" className="w-full justify-start gap-2 rounded-xl text-red-600 hover:text-red-700 hover:bg-red-50">
                   <Trash2 size={16} /> Delete Account Permanently
