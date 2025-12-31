@@ -78,7 +78,8 @@ function updateWranglerJsonc() {
 
 function runSetupCommands() {
     const commands = [
-    "bun add jspdf jspdf-autotable"
+    "bun add jspdf jspdf-autotable",
+    "bun add bcryptjs"
 ];
     
     if (commands.length === 0) {
