@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Calendar, TrendingUp, Trash2, Loader2, Library, Check, ChevronRight, Book, Sparkles, RefreshCw, ArrowRight } from 'lucide-react';
+import { Plus, Calendar, TrendingUp, Trash2, Loader2, Library, Check, ChevronRight, Book, Sparkles, RefreshCw, ArrowRight, Flame } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, differenceInDays, isSameDay, subDays } from 'date-fns';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,7 @@ import { AdvancedSearch } from '@/components/AdvancedSearch';
 import type { Journal } from '@shared/types';
 export function Dashboard() {
   const journals = useAppStore((s) => s.journals);
+  const entries = useAppStore((s) => s.entries);
   const isLoading = useAppStore((s) => s.isLoading);
   const isSaving = useAppStore((s) => s.isSaving);
   const user = useAppStore((s) => s.user);
@@ -32,11 +33,30 @@ export function Dashboard() {
   const [selectedTemplate, setSelectedTemplate] = useState<JournalTemplate>(JOURNAL_TEMPLATES[0]);
   const [customTitle, setCustomTitle] = useState('');
   const [customDesc, setCustomDesc] = useState('');
-  const hasInitialized = React.useRef(false);
+  // Calculate Streak
+  const streak = useMemo(() => {
+    if (!entries.length) return 0;
+    const sortedDates = Array.from(new Set(entries.map(e => format(new Date(e.date), 'yyyy-MM-dd'))))
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+    let currentStreak = 0;
+    let today = new Date();
+    // Check if the most recent entry is today or yesterday
+    const latestDate = new Date(sortedDates[0]);
+    if (differenceInDays(today, latestDate) > 1) return 0;
+    for (let i = 0; i < sortedDates.length; i++) {
+      const date = new Date(sortedDates[i]);
+      const expected = subDays(latestDate, i);
+      if (isSameDay(date, expected)) {
+        currentStreak++;
+      } else {
+        break;
+      }
+    }
+    return currentStreak;
+  }, [entries]);
   useEffect(() => {
-    if (journals.length > 0 && !hasInitialized.current) {
+    if (journals.length > 0) {
       setFilteredJournals(journals);
-      hasInitialized.current = true;
     }
   }, [journals]);
   const handleCreate = async () => {
@@ -63,23 +83,28 @@ export function Dashboard() {
   const firstName = user?.name?.split(' ')[0] ?? 'Explorer';
   return (
     <AppLayout container>
-      <div className="space-y-10">
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <h1 className="text-4xl font-serif font-medium text-stone-900 dark:text-stone-50">
+      <div className="space-y-12 max-w-7xl mx-auto">
+        <header className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+          <div className="space-y-1">
+            <h1 className="text-4xl md:text-5xl font-serif font-medium text-stone-900 dark:text-stone-50 tracking-tight">
               {greeting}, {firstName}
             </h1>
-            <p className="text-stone-500 mt-1 font-light italic">Your reflections are waiting for you.</p>
+            <div className="flex items-center gap-4">
+              <p className="text-stone-500 font-light italic">Your reflections are waiting for you.</p>
+              {streak > 0 && (
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-bold border border-amber-100">
+                  <Flame size={14} className="fill-current" /> {streak} Day Streak
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex gap-3">
-            <Link to="/ai-assistant">
-              <Button variant="outline" className="rounded-full gap-2 border-amber-200 bg-amber-50/30 text-amber-700 hover:bg-amber-50">
-                <Sparkles size={16} /> Intelligence
-              </Button>
-            </Link>
+            <div className="hidden lg:flex items-center gap-2 mr-4 text-xs font-serif text-stone-400 italic">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Secure Sync Active
+            </div>
             <Dialog open={isCreateOpen} onOpenChange={(o) => { setIsCreateOpen(o); if(!o) setStep('template'); }}>
               <DialogTrigger asChild>
-                <Button id="tour-new-journal" className="rounded-full bg-stone-900 hover:bg-stone-800 text-white gap-2 transition-all hover:scale-105 shadow-lg shadow-stone-200">
+                <Button id="tour-new-journal" className="rounded-full bg-stone-900 hover:bg-stone-800 text-white px-6 gap-2 transition-all hover:scale-105 shadow-xl shadow-stone-200">
                   <Plus size={18} /> New Journal
                 </Button>
               </DialogTrigger>
@@ -116,16 +141,16 @@ export function Dashboard() {
                       <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
                           <Label>Title</Label>
-                          <Input value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} className="rounded-xl" />
+                          <Input value={customTitle} onChange={(e) => setCustomTitle(e.target.value)} className="rounded-xl h-12" />
                         </div>
                         <div className="grid gap-2">
                           <Label>Description</Label>
-                          <Input value={customDesc} onChange={(e) => setCustomDesc(e.target.value)} className="rounded-xl" />
+                          <Input value={customDesc} onChange={(e) => setCustomDesc(e.target.value)} className="rounded-xl h-12" />
                         </div>
                       </div>
                       <DialogFooter>
-                        <Button onClick={handleCreate} disabled={isSaving} className="w-full rounded-xl bg-stone-900 text-white">
-                          {isSaving ? <Loader2 className="animate-spin mr-2" size={16} /> : <Check size={16} className="mr-2" />} Initialize Journal
+                        <Button onClick={handleCreate} disabled={isSaving} className="w-full h-12 rounded-xl bg-stone-900 text-white hover:bg-stone-800 shadow-lg">
+                          {isSaving ? <Loader2 className="animate-spin mr-2" size={16} /> : <Check size={16} className="mr-2" />} Initialize Sanctuary
                         </Button>
                       </DialogFooter>
                     </motion.div>
@@ -135,7 +160,7 @@ export function Dashboard() {
             </Dialog>
           </div>
         </header>
-        <section id="tour-search-bar" className="bg-stone-50/30 rounded-4xl p-1 border border-stone-100">
+        <section id="tour-search-bar" className="bg-stone-50/50 rounded-4xl p-1 border border-stone-100 shadow-inner">
           <AdvancedSearch
             items={journals}
             onResults={onSearchResults}
@@ -145,73 +170,90 @@ export function Dashboard() {
         </section>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <motion.div id="tour-daily-guidance" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="group">
-            <Card className="h-full rounded-4xl border-none bg-stone-900 text-white shadow-2xl relative overflow-hidden p-8">
-              <div className="relative z-10 flex flex-col h-full justify-between gap-6">
+            <Card className="h-full rounded-4xl border-none bg-stone-900 text-white shadow-2xl relative overflow-hidden p-10">
+              <div className="relative z-10 flex flex-col h-full justify-between gap-8">
                 <div>
-                  <div className="flex items-center gap-2 text-amber-400 mb-4">
-                    <Sparkles size={18} />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.3em]">Daily Guidance</span>
+                  <div className="flex items-center gap-2 text-amber-400 mb-6">
+                    <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+                      <Sparkles size={20} />
+                    </motion.div>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.4em]">Daily Guidance</span>
                   </div>
-                  <h2 className="text-2xl md:text-3xl font-serif leading-tight">
+                  <h2 className="text-3xl md:text-4xl font-serif leading-tight tracking-tight">
                     {dailyContent?.prompt || "How did you find stillness in the chaos today?"}
                   </h2>
                 </div>
                 <div className="flex items-center justify-between">
                   <Button
                     onClick={() => dailyContent?.targetJournalId && navigate(`/journal/${dailyContent.targetJournalId}`)}
-                    className="rounded-full bg-white text-stone-900 hover:bg-stone-100 group/btn"
+                    className="rounded-full bg-white text-stone-900 hover:bg-stone-100 group/btn px-8 h-12 font-medium"
                   >
-                    Start Writing <ArrowRight size={16} className="ml-2 group-hover/btn:translate-x-1 transition-transform" />
+                    Start Writing <ArrowRight size={18} className="ml-2 group-hover/btn:translate-x-1 transition-transform" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => fetchDailyContent()} className="text-white/40 hover:text-white">
-                    <RefreshCw size={16} />
+                  <Button variant="ghost" size="icon" onClick={() => fetchDailyContent()} className="text-white/40 hover:text-white transition-colors">
+                    <RefreshCw size={18} />
                   </Button>
                 </div>
               </div>
-              <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                <Sparkles size={200} />
+              <div className="absolute top-[-100px] right-[-100px] opacity-[0.03] pointer-events-none rotate-12">
+                <Sparkles size={400} />
               </div>
             </Card>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-            <Card className="h-full rounded-4xl border-stone-100 dark:border-stone-800 shadow-sm p-8 bg-stone-50/50 flex flex-col justify-center text-center">
-              <div className="text-stone-400 italic font-serif text-lg leading-relaxed px-4">
+            <Card className="h-full rounded-4xl border-stone-100 shadow-sm p-10 bg-white flex flex-col justify-center text-center relative overflow-hidden">
+              <div className="text-stone-400 italic font-serif text-2xl leading-relaxed px-6 relative z-10">
                 "{dailyContent?.affirmation || "I am the architect of my own growth, building a legacy one word at a time."}"
               </div>
-              <div className="mt-4 text-[10px] font-bold uppercase tracking-widest text-stone-300">
-                Your Daily Affirmation
+              <div className="mt-8 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-300 relative z-10">
+                Your Digital Mantra
+              </div>
+              <div className="absolute bottom-0 right-0 p-4 opacity-[0.05] grayscale">
+                 <LucideIcons.CloudSun size={120} />
               </div>
             </Card>
           </motion.div>
         </div>
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-48 rounded-3xl bg-stone-100 animate-pulse" />
+              <div key={i} className="h-64 rounded-4xl bg-stone-100 animate-pulse" />
             ))}
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            <Card className="lg:col-span-1 rounded-3xl border-stone-100 dark:border-stone-800 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-stone-500 uppercase tracking-wider flex items-center gap-2">
-                  <TrendingUp size={16} /> Library Status
+            <Card className="lg:col-span-1 rounded-4xl border-stone-100 shadow-sm bg-stone-50/50 flex flex-col">
+              <CardHeader className="p-8 pb-4">
+                <CardTitle className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.3em] flex items-center gap-2">
+                  <TrendingUp size={14} /> Global Status
                 </CardTitle>
               </CardHeader>
-              <div className="px-6 pb-6">
-                <div className="text-5xl font-serif font-medium">{journals.length}</div>
-                <p className="text-sm text-stone-500 mt-2">Active journals</p>
+              <div className="px-8 pb-8 flex-1 flex flex-col justify-end">
+                <div className="text-6xl font-serif font-medium text-stone-900">{journals.length}</div>
+                <p className="text-sm text-stone-500 mt-2 font-light">Active Archives</p>
+                <div className="mt-6 pt-6 border-t border-stone-100 space-y-2">
+                  <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-stone-400">
+                    <span>Safety</span>
+                    <span className="text-emerald-500">Encrypted</span>
+                  </div>
+                  <div className="h-1 w-full bg-stone-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-stone-900 w-full" />
+                  </div>
+                </div>
               </div>
             </Card>
-            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8">
               {filteredJournals.length === 0 ? (
-                <div className="md:col-span-2 py-20 border-2 border-dashed border-stone-200 rounded-3xl flex flex-col items-center justify-center text-center space-y-4">
-                  <div className="h-16 w-16 rounded-2xl bg-stone-50 flex items-center justify-center text-stone-300"><Library size={32} /></div>
-                  <h3 className="text-xl font-medium text-stone-900">
-                    {journals.length > 0 ? "No matches found in your library" : "Your library is empty"}
-                  </h3>
-                  <Button onClick={() => setIsCreateOpen(true)} variant="outline" className="rounded-full">
-                    {journals.length > 0 ? "Clear Search or Create New" : "Initialize First Journal"}
+                <div className="md:col-span-2 py-32 border-2 border-dashed border-stone-200 rounded-4xl flex flex-col items-center justify-center text-center space-y-6">
+                  <div className="h-20 w-20 rounded-3xl bg-stone-50 flex items-center justify-center text-stone-300 shadow-inner"><Library size={40} /></div>
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-serif text-stone-900">
+                      {journals.length > 0 ? "No matches in your archives" : "Your sanctuary is pristine"}
+                    </h3>
+                    <p className="text-stone-400 text-sm max-w-xs font-light">Begin your legacy by initializing your first journal.</p>
+                  </div>
+                  <Button onClick={() => setIsCreateOpen(true)} className="rounded-full bg-stone-900 text-white px-8">
+                    {journals.length > 0 ? "Clear Search Parameters" : "Initialize First Journal"}
                   </Button>
                 </div>
               ) : (
@@ -220,38 +262,54 @@ export function Dashboard() {
                     const template = JOURNAL_TEMPLATES.find(t => t.id === journal.templateId) || JOURNAL_TEMPLATES[0];
                     const IconComponent = (LucideIcons as any)[template.icon] || Book;
                     return (
-                      <div key={journal.id} className="relative group">
-                        <Link to={`/journal/${journal.id}`}>
-                          <Card className="h-full rounded-3xl border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md hover:border-stone-300 transition-all group overflow-hidden">
-                            <CardHeader>
-                              <div className="flex justify-between items-start mb-2">
-                                <div className={cn("p-2 rounded-lg group-hover:scale-110 transition-transform text-white", `bg-${template.color}-500`)}>
-                                  <IconComponent size={20} />
+                      <div key={journal.id} className="relative group h-full">
+                        <Link to={`/journal/${journal.id}`} className="block h-full">
+                          <Card className="h-full rounded-4xl border-stone-100 shadow-sm hover:shadow-xl hover:border-stone-300 transition-all duration-500 group overflow-hidden bg-white">
+                            <CardHeader className="p-8">
+                              <div className="flex justify-between items-start mb-4">
+                                <div className={cn("p-3 rounded-2xl group-hover:scale-110 transition-transform text-white shadow-lg", `bg-${template.color}-500`)}>
+                                  <IconComponent size={24} />
                                 </div>
-                                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">{template.name}</span>
+                                <Badge variant="outline" className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-400 border-stone-100 bg-stone-50">
+                                  {template.name}
+                                </Badge>
                               </div>
-                              <CardTitle className="text-xl font-medium">{journal.title}</CardTitle>
-                              <CardDescription className="line-clamp-2 mt-1">{journal.description}</CardDescription>
+                              <CardTitle className="text-2xl font-serif text-stone-900 mb-2">{journal.title}</CardTitle>
+                              <CardDescription className="line-clamp-2 text-stone-500 font-light leading-relaxed">
+                                {journal.description}
+                              </CardDescription>
                             </CardHeader>
-                            <CardFooter className="pt-0 flex items-center gap-2 text-xs text-stone-400">
-                              <Calendar size={12} /> Last entry: {journal.lastEntryAt ? format(new Date(journal.lastEntryAt), 'MMM dd, yyyy') : 'Never'}
+                            <CardFooter className="p-8 pt-0 flex items-center gap-3 text-xs text-stone-400 font-serif">
+                              <Calendar size={14} className="opacity-50" /> 
+                              <span>Last active: {journal.lastEntryAt ? format(new Date(journal.lastEntryAt), 'MMM dd, yyyy') : 'Never'}</span>
                             </CardFooter>
                           </Card>
                         </Link>
-                        <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
                           <AlertDialog>
-                            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-stone-300 hover:text-red-500"><Trash2 size={16} /></Button></AlertDialogTrigger>
-                            <AlertDialogContent className="rounded-3xl">
-                              <AlertDialogHeader><AlertDialogTitle>Delete Journal?</AlertDialogTitle><AlertDialogDescription>This will permanently delete "{journal.title}" and its history.</AlertDialogDescription></AlertDialogHeader>
-                              <AlertDialogFooter><AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel><AlertDialogAction onClick={() => deleteJournal(journal.id)} className="bg-red-500 text-white rounded-xl">Delete</AlertDialogAction></AlertDialogFooter>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-white shadow-lg text-stone-300 hover:text-red-500">
+                                <Trash2 size={18} />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="rounded-4xl border-rose-100">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className="font-serif text-2xl">Delete Archive?</AlertDialogTitle>
+                                <AlertDialogDescription>This will permanently erase "{journal.title}" and all contained reflections from the Edge.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel className="rounded-xl">Retain</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteJournal(journal.id)} className="bg-red-500 text-white rounded-xl hover:bg-red-600">Delete</AlertDialogAction>
+                              </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
                         </div>
                       </div>
                     );
                   })}
-                  <button onClick={() => setIsCreateOpen(true)} className="h-full border-2 border-dashed border-stone-200 dark:border-stone-800 rounded-3xl flex flex-col items-center justify-center gap-3 py-10 text-stone-400 hover:text-stone-600 hover:border-stone-400 transition-colors min-h-[180px]">
-                    <Plus size={32} strokeWidth={1.5} /> <span className="font-medium">New Sanctuary</span>
+                  <button onClick={() => setIsCreateOpen(true)} className="h-full border-2 border-dashed border-stone-200 rounded-4xl flex flex-col items-center justify-center gap-4 p-8 text-stone-300 hover:text-stone-500 hover:border-stone-400 hover:bg-stone-50/50 transition-all min-h-[220px]">
+                    <Plus size={48} strokeWidth={1} /> 
+                    <span className="font-serif text-lg">New Sanctuary</span>
                   </button>
                 </>
               )}

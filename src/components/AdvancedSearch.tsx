@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, SlidersHorizontal, History, Star, Bookmark, Calendar, Type, Sparkles, X, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, SlidersHorizontal, History, Bookmark, Calendar, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/lib/store';
@@ -34,6 +33,8 @@ export function AdvancedSearch<T extends Record<string, any>>({
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({});
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isRefining, setIsRefining] = useState(false);
+  // Debounced result calculation to avoid rapid updates during typing
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       const searchStr = query.toLowerCase();
@@ -66,13 +67,15 @@ export function AdvancedSearch<T extends Record<string, any>>({
       return true;
     });
   }, [items, query, filters, searchFields, context]);
-  const stableOnResults = useCallback(onResults, []);
-  const resultSignature = useMemo(() => {
-    return JSON.stringify(filteredItems.map(i => i.id).sort());
-  }, [filteredItems]);
+  // Sync results back to parent with stability
   useEffect(() => {
-    stableOnResults(filteredItems);
-  }, [resultSignature, stableOnResults, filteredItems]);
+    setIsRefining(true);
+    const timer = setTimeout(() => {
+      onResults(filteredItems);
+      setIsRefining(false);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [filteredItems, onResults]);
   const handleApplySaved = (saved: any) => {
     setQuery(saved.query);
     setFilters(saved.filters);
@@ -81,6 +84,7 @@ export function AdvancedSearch<T extends Record<string, any>>({
   const handleSaveCurrent = () => {
     const name = query || `Search ${dateFnsFormat(new Date(), 'HH:mm')}`;
     saveSearch({ name, query, filters });
+    toast.success('Search pattern archived.');
   };
   const suggestions = useMemo(() => {
     if (!query) return [];
@@ -95,7 +99,13 @@ export function AdvancedSearch<T extends Record<string, any>>({
     <div className="w-full space-y-4">
       <div className="relative flex items-center gap-2">
         <div className="relative flex-1 group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 group-focus-within:text-stone-900 transition-colors" size={18} />
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+            {isRefining ? (
+              <Loader2 className="text-stone-400 animate-spin" size={18} />
+            ) : (
+              <Search className="text-stone-400 group-focus-within:text-stone-900 transition-colors" size={18} />
+            )}
+          </div>
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -105,47 +115,52 @@ export function AdvancedSearch<T extends Record<string, any>>({
             placeholder={placeholder}
             className="pl-11 pr-4 py-6 rounded-2xl border-stone-200 bg-white/50 backdrop-blur-sm focus-visible:ring-stone-200 text-lg font-serif"
           />
-          <AnimatePresence>
+          <AnimatePresence shadow-xl>
             {isDropdownOpen && (recentSearches.length > 0 || savedSearches.length > 0 || suggestions.length > 0) && (
               <motion.div
-                initial={{ opacity: 0, y: 5 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 5 }}
-                className="absolute top-full left-0 right-0 mt-2 bg-white border border-stone-100 rounded-2xl shadow-xl z-50 overflow-hidden"
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute top-full left-0 right-0 mt-3 bg-white border border-stone-100 rounded-3xl shadow-2xl z-50 overflow-hidden"
               >
                 {suggestions.length > 0 && (
-                  <div className="p-2 border-b border-stone-50">
+                  <div className="p-3 border-b border-stone-50">
                     <p className="px-3 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Suggestions</p>
                     {suggestions.map((s, idx) => (
-                      <button key={idx} onClick={() => setQuery(s.text)} className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-stone-50 text-sm transition-colors">
-                        <Sparkles size={14} className="text-amber-500" />
-                        <span className="flex-1 text-left">{s.text}</span>
+                      <button key={idx} onClick={() => setQuery(s.text)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-stone-50 text-sm transition-all hover:translate-x-1">
+                        <Sparkles size={14} className="text-amber-400" />
+                        <span className="flex-1 text-left font-serif">{s.text}</span>
                         <span className="text-[10px] text-stone-300 italic">{s.type}</span>
                       </button>
                     ))}
                   </div>
                 )}
                 {savedSearches.length > 0 && (
-                  <div className="p-2 border-b border-stone-50">
-                    <p className="px-3 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Saved Patterns</p>
-                    {savedSearches.map(s => (
-                      <button key={s.id} onClick={() => handleApplySaved(s)} className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-stone-50 text-sm transition-colors">
-                        <Bookmark size={14} className="text-amber-500" />
-                        <span className="flex-1 text-left">{s.name}</span>
-                      </button>
-                    ))}
+                  <div className="p-3 border-b border-stone-50">
+                    <p className="px-3 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Saved Filters</p>
+                    <div className="flex flex-wrap gap-2 px-3 py-2">
+                      {savedSearches.map(s => (
+                        <button 
+                          key={s.id} 
+                          onClick={() => handleApplySaved(s)} 
+                          className="px-3 py-1.5 rounded-full bg-stone-50 border border-stone-100 text-xs text-stone-600 hover:bg-stone-900 hover:text-white transition-all"
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {recentSearches.length > 0 && (
-                  <div className="p-2">
+                  <div className="p-3">
                     <div className="flex items-center justify-between px-3 py-1">
-                      <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Recent</p>
+                      <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Recent Activity</p>
                       <button onClick={clearRecentSearches} className="text-[10px] text-stone-300 hover:text-stone-600">Clear</button>
                     </div>
                     {recentSearches.map(q => (
-                      <button key={q} onClick={() => setQuery(q)} className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-stone-50 text-sm transition-colors">
+                      <button key={q} onClick={() => setQuery(q)} className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl hover:bg-stone-50 text-sm transition-colors">
                         <History size={14} className="text-stone-300" />
-                        <span className="flex-1 text-left">{q}</span>
+                        <span className="flex-1 text-left text-stone-600 font-light">{q}</span>
                       </button>
                     ))}
                   </div>
@@ -170,17 +185,17 @@ export function AdvancedSearch<T extends Record<string, any>>({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="bg-stone-50 border border-stone-200 rounded-3xl p-6 grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="bg-stone-50 border border-stone-200 rounded-4xl p-8 grid grid-cols-1 md:grid-cols-3 gap-10">
               <div className="space-y-4">
                 <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
-                  <Sparkles size={12} /> Emotional Map
+                  <Sparkles size={12} /> Emotional Filters
                 </Label>
                 <div className="flex flex-wrap gap-2">
-                  {['High', 'Normal', 'Low', 'Inspired', 'Tired'].map(m => (
+                  {['High', 'Inspired', 'Normal', 'Tired', 'Low'].map(m => (
                     <Badge
                       key={m}
                       variant={filters.moods?.includes(m) ? 'default' : 'outline'}
-                      className="cursor-pointer rounded-full px-3 py-1 text-[10px]"
+                      className="cursor-pointer rounded-full px-3 py-1 text-[10px] h-7 border-stone-200"
                       onClick={() => setFilters(f => ({ ...f, moods: f.moods?.includes(m) ? f.moods.filter(x => x !== m) : [...(f.moods || []), m] }))}
                     >
                       {m}
@@ -190,29 +205,29 @@ export function AdvancedSearch<T extends Record<string, any>>({
               </div>
               <div className="space-y-4">
                 <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
-                  <Calendar size={12} /> Range
+                  <Calendar size={12} /> Archive Window
                 </Label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   <Input
                     type="date"
-                    className="h-8 text-[10px] rounded-lg"
+                    className="h-9 text-[10px] rounded-xl border-stone-200 bg-white"
                     value={filters.dateRange?.start || ''}
                     onChange={(e) => setFilters(f => ({ ...f, dateRange: { ...(f.dateRange || { start: '', end: '' }), start: e.target.value } }))}
                   />
                   <Input
                     type="date"
-                    className="h-8 text-[10px] rounded-lg"
+                    className="h-9 text-[10px] rounded-xl border-stone-200 bg-white"
                     value={filters.dateRange?.end || ''}
                     onChange={(e) => setFilters(f => ({ ...f, dateRange: { ...(f.dateRange || { start: '', end: '' }), end: e.target.value } }))}
                   />
                 </div>
               </div>
-              <div className="flex flex-col justify-end gap-2">
-                <Button onClick={handleSaveCurrent} className="rounded-xl h-9 text-xs gap-2">
-                  <Bookmark size={14} /> Save Pattern
+              <div className="flex flex-col justify-end gap-3">
+                <Button onClick={handleSaveCurrent} className="rounded-xl h-10 text-xs gap-2 bg-stone-900 text-white hover:bg-stone-800">
+                  <Bookmark size={14} /> Save Filter Pattern
                 </Button>
-                <Button variant="ghost" onClick={() => setFilters({})} className="h-9 text-[10px] uppercase font-bold text-stone-400">
-                  Reset
+                <Button variant="ghost" onClick={() => setFilters({})} className="h-10 text-[10px] uppercase font-bold text-stone-400 hover:text-stone-900">
+                  Reset Parameters
                 </Button>
               </div>
             </div>

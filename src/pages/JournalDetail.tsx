@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
@@ -8,9 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronLeft, Send, Sparkles, Calendar, Loader2, Download, Star, Book, Mic, Image as ImageIcon, X, Search, Eye, PenLine, LayoutList } from 'lucide-react';
+import { ChevronLeft, Send, Sparkles, Calendar, Loader2, Download, Star, Book, Mic, Eye, PenLine, Maximize2, Minimize2, Type } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
-import { format } from 'date-fns';
+import { format, isThisWeek, isThisMonth } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { JOURNAL_TEMPLATES } from '@shared/templates';
@@ -32,9 +32,9 @@ export function JournalDetail() {
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [title, setTitle] = useState('');
   const [tags, setTags] = useState<string[]>([]);
-  const [images, setImages] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const [filteredEntries, setFilteredEntries] = useState<Entry[]>([]);
   const [exportOpen, setExportOpen] = useState(false);
   useEffect(() => {
@@ -42,21 +42,16 @@ export function JournalDetail() {
       const d = drafts[id];
       setTitle(d.title || '');
       setTags(d.tags || []);
-      setImages(d.images || []);
       setFormData(d.structuredData || {});
     }
   }, [id, drafts]);
   useEffect(() => {
     if (id) fetchEntries(id);
   }, [id, fetchEntries]);
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (id && (title || tags.length > 0 || Object.keys(formData).length > 0)) {
-        setDraft(id, { title, tags, images, structuredData: formData });
-      }
-    }, 30000);
-    return () => clearInterval(timer);
-  }, [id, title, tags, images, formData, setDraft]);
+  const wordCount = useMemo(() => {
+    const allText = Object.values(formData).join(' ') + ' ' + title;
+    return allText.trim() === '' ? 0 : allText.trim().split(/\s+/).length;
+  }, [formData, title]);
   const handleSave = async () => {
     if (!id) return;
     const summaryParts = template.fields.map(field => {
@@ -64,190 +59,160 @@ export function JournalDetail() {
       if (!val) return null;
       return `**${field.label}:** ${val}`;
     }).filter(Boolean);
-    const content = summaryParts.join('\n');
-    const moodValue = formData.mood_score || formData.intensity || 'Normal';
-    const moodDescriptor = typeof moodValue === 'number' ? `${moodValue} Stars` : String(moodValue);
     await addEntry({
       journalId: id,
       title: title || `Reflection ${format(new Date(), 'MMM dd')}`,
-      content,
+      content: summaryParts.join('\n'),
       structuredData: formData,
       tags,
-      images,
-      mood: moodDescriptor
+      wordCount,
+      mood: formData.mood_score || formData.intensity || 'Normal'
     });
     setFormData({});
     setTitle('');
-    setTags([]);
-    setImages([]);
-    toast.success('Reflection preserved.');
-  };
-  const toggleRecording = () => {
-    if (!('webkitSpeechRecognition' in window)) {
-      toast.error('Speech recognition not supported in this browser.');
-      return;
-    }
-    const SpeechRecognition = (window as any).webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.onstart = () => setIsRecording(true);
-    recognition.onend = () => setIsRecording(false);
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      const firstTextarea = template.fields.find(f => f.type === 'textarea')?.id || 'content';
-      setFormData(prev => ({ ...prev, [firstTextarea]: (prev[firstTextarea] || '') + ' ' + transcript }));
-    };
-    if (isRecording) recognition.stop(); else recognition.start();
+    toast.success('Preserved in the archive.');
   };
   const onSearchResults = useCallback((results: Entry[]) => {
     setFilteredEntries(results);
   }, []);
-  const renderMarkdown = (text: string) => {
-    if (!text) return null;
-    return text.split('\n').map((line, i) => {
-      const boldMatch = line.match(/^\*\*(.*?)\*\*(.*)/);
-      if (boldMatch) {
-        return <p key={i} className="mb-2"><strong className="text-stone-900">{boldMatch[1]}</strong>{boldMatch[2]}</p>;
-      }
-      return <p key={i} className="mb-2">{line}</p>;
+  const groupedEntries = useMemo(() => {
+    const thisWeek: Entry[] = [];
+    const thisMonth: Entry[] = [];
+    const older: Entry[] = [];
+    filteredEntries.forEach(entry => {
+      const date = new Date(entry.date);
+      if (isThisWeek(date)) thisWeek.push(entry);
+      else if (isThisMonth(date)) thisMonth.push(entry);
+      else older.push(entry);
     });
-  };
-  if (!journal) {
-    return (
-      <AppLayout container>
-        <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <Loader2 className="animate-spin text-stone-300 h-8 w-8" />
-          <p className="text-stone-500 font-serif">Opening journal...</p>
-        </div>
-      </AppLayout>
-    );
-  }
+    return { thisWeek, thisMonth, older };
+  }, [filteredEntries]);
+  if (!journal) return <AppLayout container><Loader2 className="animate-spin" /></AppLayout>;
   const IconComponent = (LucideIcons as any)[template.icon] || Book;
   return (
-    <AppLayout>
-      <div className="max-w-4xl mx-auto px-6 py-12 print:p-0">
-        <header className="mb-12 print:mb-8">
-          <div className="flex items-center justify-between mb-6 print:hidden">
-            <Link to="/dashboard" className="inline-flex items-center text-sm text-stone-500 hover:text-stone-900 group">
-              <ChevronLeft size={16} className="mr-1 group-hover:-translate-x-1 transition-transform" /> Dashboard
-            </Link>
-            <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setPreviewMode(!previewMode)} className="rounded-full gap-2">
-                {previewMode ? <PenLine size={14} /> : <Eye size={14} />} {previewMode ? 'Edit' : 'Preview'}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setExportOpen(true)} className="rounded-full gap-2">
+    <AppLayout className={cn(focusMode && "sidebar-hidden")} container={!focusMode}>
+      <div className={cn("max-w-4xl mx-auto px-6 py-12 transition-all", focusMode && "max-w-2xl pt-24")}>
+        <header className="mb-12 flex items-start justify-between">
+          {!focusMode ? (
+            <div>
+              <Link to="/dashboard" className="text-xs text-stone-400 hover:text-stone-900 flex items-center mb-4 transition-colors">
+                <ChevronLeft size={14} /> Back to Dashboard
+              </Link>
+              <div className="flex items-center gap-3 mb-2">
+                <div className={cn("p-2 rounded-xl text-white", `bg-${template.color}-500`)}>
+                  <IconComponent size={16} />
+                </div>
+                <h1 className="text-4xl font-serif font-medium text-stone-900">{journal.title}</h1>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full text-center mb-12">
+              <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-stone-300">Focus Mode Active</span>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button variant="ghost" size="icon" onClick={() => setFocusMode(!focusMode)} className="rounded-full">
+              {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </Button>
+            {!focusMode && (
+              <Button variant="outline" size="sm" onClick={() => setExportOpen(true)} className="rounded-full h-10 gap-2">
                 <Download size={14} /> Export
               </Button>
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <div className={cn("p-1.5 rounded-lg text-white", `bg-${template.color}-500`)}>
-                <IconComponent size={14} />
-              </div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-stone-500">{template.name}</div>
-            </div>
-            <h1 className="text-4xl font-serif font-medium text-stone-900 dark:text-stone-50">{journal.title}</h1>
+            )}
           </div>
         </header>
-        <div className="grid grid-cols-1 gap-12">
-          {!previewMode ? (
-            <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-8 shadow-sm print:hidden">
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <Label className="text-stone-400 text-[10px] uppercase font-bold tracking-widest">Entry Title</Label>
-                  <Input placeholder="Capture..." className="border-none text-2xl font-serif p-0 focus-visible:ring-0 placeholder:text-stone-200 h-auto" value={title} onChange={(e) => setTitle(e.target.value)} />
-                </div>
-                {template.fields.map((field) => (
-                  <div key={field.id} className="space-y-2">
-                    <Label className="text-stone-600 font-medium">{field.label}</Label>
-                    {field.type === 'textarea' ? (
-                      <div className="relative">
-                        <Textarea placeholder={field.placeholder} className="rounded-xl border-stone-100 min-h-[120px] focus:ring-stone-200 bg-stone-50/30" value={formData[field.id] || ''} onChange={(e) => setFormData(p => ({ ...p, [field.id]: e.target.value }))} />
-                        <button onClick={toggleRecording} className={cn("absolute bottom-3 right-3 p-2 rounded-full transition-all", isRecording ? "bg-red-500 text-white animate-recording" : "bg-stone-100 text-stone-400 hover:text-stone-600")}><Mic size={16} /></button>
-                      </div>
-                    ) : field.type === 'number' ? (
-                      <Input type="number" className="rounded-xl border-stone-100" value={formData[field.id] || ''} onChange={(e) => setFormData(p => ({ ...p, [field.id]: e.target.value }))} />
-                    ) : field.type === 'select' ? (
-                      <Select onValueChange={(val) => setFormData(p => ({ ...p, [field.id]: val }))} value={formData[field.id]}>
-                        <SelectTrigger className="rounded-xl border-stone-100"><SelectValue placeholder="Select an option" /></SelectTrigger>
-                        <SelectContent>{field.options?.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}</SelectContent>
-                      </Select>
-                    ) : field.type === 'rating' ? (
-                      <div className="flex gap-2">
-                        {[1, 2, 3, 4, 5].map((num) => (
-                          <button key={num} onClick={() => setFormData(p => ({ ...p, [field.id]: num }))} className={cn("p-3 rounded-xl border transition-all hover:scale-105", (formData[field.id] || 0) >= num ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-stone-50 border-stone-100 text-stone-300")}><Star size={18} fill={(formData[field.id] || 0) >= num ? "currentColor" : "none"} /></button>
-                        ))}
-                      </div>
-                    ) : (
-                      <Input className="rounded-xl border-stone-100" value={formData[field.id] || ''} onChange={(e) => setFormData(p => ({ ...p, [field.id]: e.target.value }))} />
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-8 flex items-center justify-between border-t border-stone-50 pt-6">
-                <div className="text-xs text-stone-400 font-light italic">{isSaving ? 'Synching...' : 'Auto-saving enabled.'}</div>
-                <Button onClick={handleSave} disabled={isSaving || (!title && Object.keys(formData).length === 0)} className="rounded-full bg-stone-900 text-white px-8">
-                  {isSaving ? <Loader2 className="animate-spin mr-2" size={16} /> : <Send size={16} className="mr-2" />}
-                  Preserve Entry
-                </Button>
-              </div>
-            </motion.section>
-          ) : (
-            <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="prose-lumina bg-white border border-stone-200 rounded-3xl p-12 shadow-sm min-h-[400px]">
-              <h1 className="text-3xl font-serif font-medium mb-8">{title || 'Untitled Reflection'}</h1>
-              {template.fields.map(f => (
-                <div key={f.id} className="mb-6">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-stone-400 mb-2">{f.label}</h3>
-                  <div className="text-stone-700 leading-relaxed">
-                    {f.type === 'rating' ? (
-                      <div className="flex gap-1 text-amber-500">
-                        {Array.from({length: Number(formData[f.id] || 0)}).map((_, i) => <Star key={i} size={14} fill="currentColor" />)}
-                      </div>
-                    ) : (
-                      renderMarkdown(formData[f.id] || '—')
-                    )}
-                  </div>
-                </div>
-              ))}
-            </motion.section>
-          )}
-          <section className="space-y-8 pb-20">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
-              <h2 className="text-xl font-medium text-stone-900 flex items-center gap-2">
-                Discovery <span className="text-sm font-normal text-stone-400">({filteredEntries.length} of {entries.length})</span>
-              </h2>
+        <section className="bg-white rounded-4xl border border-stone-200 p-10 shadow-sm mb-20 relative">
+          <div className="absolute top-6 right-10 flex items-center gap-3 text-stone-300">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-widest">
+              <Type size={12} /> {wordCount} Words
             </div>
-            <AdvancedSearch
-              items={entries}
-              onResults={onSearchResults}
-              searchFields={['title', 'content']}
-              placeholder="Search in this sanctuary..."
-              context="journal"
+          </div>
+          <div className="space-y-8">
+            <Input 
+              placeholder="Give this reflection a title..." 
+              className="border-none text-3xl font-serif p-0 focus-visible:ring-0 placeholder:text-stone-100 h-auto"
+              value={title} 
+              onChange={(e) => setTitle(e.target.value)} 
             />
-            <div className="space-y-8">
-              <AnimatePresence mode="popLayout">
-                {filteredEntries.length === 0 ? (
-                  <div className="text-center py-20 text-stone-400 italic flex flex-col items-center gap-2">
-                    <LayoutList size={24} className="opacity-20" />
-                    No reflections match your criteria.
+            {template.fields.map((field) => (
+              <div key={field.id} className="space-y-3">
+                <Label className="text-xs font-bold uppercase tracking-widest text-stone-400">{field.label}</Label>
+                {field.type === 'textarea' ? (
+                  <Textarea 
+                    placeholder={field.placeholder} 
+                    className="rounded-2xl border-stone-100 bg-stone-50/30 min-h-[160px] text-lg font-serif p-6"
+                    value={formData[field.id] || ''} 
+                    onChange={(e) => setFormData(p => ({ ...p, [field.id]: e.target.value }))}
+                  />
+                ) : field.type === 'rating' ? (
+                  <div className="flex gap-3">
+                    {[1, 2, 3, 4, 5].map((num) => (
+                      <button 
+                        key={num} 
+                        onClick={() => setFormData(p => ({ ...p, [field.id]: num }))}
+                        className={cn(
+                          "h-12 w-12 rounded-2xl border transition-all duration-300 flex items-center justify-center",
+                          (formData[field.id] || 0) >= num ? "bg-amber-50 border-amber-200 text-amber-500 scale-105" : "bg-stone-50 border-stone-100 text-stone-200"
+                        )}
+                      >
+                        <Star size={20} fill={(formData[field.id] || 0) >= num ? "currentColor" : "none"} />
+                      </button>
+                    ))}
                   </div>
                 ) : (
-                  filteredEntries.map((entry) => (
-                    <motion.div key={entry.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-stone-50 dark:bg-stone-900/50 border border-stone-100 rounded-3xl p-8 print:border-none print:p-0">
-                      <div className="flex justify-between items-start mb-6">
-                        <time className="text-xs font-medium text-stone-400 flex items-center gap-1"><Calendar size={12} /> {format(new Date(entry.date), 'EEEE, MMM dd, yyyy')}</time>
-                        {entry.mood && <Badge variant="outline" className="text-[10px] rounded-full uppercase border-stone-200">{entry.mood}</Badge>}
-                      </div>
-                      <h3 className="text-2xl font-serif font-medium text-stone-900 mb-4">{entry.title || 'Untitled Entry'}</h3>
-                      <div className="prose-lumina-sm text-stone-700 font-serif leading-relaxed space-y-4">{renderMarkdown(entry.content)}</div>
-                    </motion.div>
-                  ))
+                  <Input 
+                    className="rounded-xl border-stone-100 h-12"
+                    value={formData[field.id] || ''} 
+                    onChange={(e) => setFormData(p => ({ ...p, [field.id]: e.target.value }))}
+                  />
                 )}
-              </AnimatePresence>
+              </div>
+            ))}
+            <div className="pt-8 border-t border-stone-50 flex items-center justify-between">
+              <span className="text-[10px] text-stone-300 font-serif italic">Auto-syncing to your private moat...</span>
+              <Button onClick={handleSave} disabled={isSaving || wordCount < 1} className="rounded-full bg-stone-900 text-white px-10 h-12 shadow-lg hover:scale-105 transition-transform">
+                {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Send size={16} className="mr-2" />}
+                Preserve Reflection
+              </Button>
+            </div>
+          </div>
+        </section>
+        {!focusMode && (
+          <section className="space-y-12">
+            <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+              <h2 className="text-2xl font-serif font-medium">Reflection History</h2>
+              <div className="w-full md:w-96">
+                <AdvancedSearch items={entries} onResults={onSearchResults} searchFields={['title', 'content']} context="journal" />
+              </div>
+            </header>
+            <div className="space-y-16">
+              {Object.entries(groupedEntries).map(([key, group]) => {
+                if (group.length === 0) return null;
+                return (
+                  <div key={key} className="space-y-8">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.4em] text-stone-400 border-b border-stone-100 pb-2">
+                      {key === 'thisWeek' ? 'This Week' : key === 'thisMonth' ? 'Earlier this Month' : 'Historical Archives'}
+                    </h3>
+                    <div className="space-y-8">
+                      {group.map((entry) => (
+                        <motion.div key={entry.id} className="group relative">
+                          <div className="absolute left-[-20px] top-0 bottom-0 w-1 bg-stone-100 rounded-full group-hover:bg-stone-900 transition-colors" />
+                          <div className="flex flex-col gap-2">
+                            <time className="text-[10px] text-stone-400 font-medium">{format(new Date(entry.date), 'EEEE, MMM dd, yyyy')}</time>
+                            <h4 className="text-2xl font-serif text-stone-900">{entry.title}</h4>
+                            <div className="text-stone-500 font-serif leading-relaxed line-clamp-3 text-sm">
+                              {entry.content.replace(/\*\*(.*?)\*\*/g, '$1')}
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
-        </div>
+        )}
       </div>
       {journal && <ExportDialog open={exportOpen} onOpenChange={setExportOpen} journal={journal} entries={entries} />}
     </AppLayout>
