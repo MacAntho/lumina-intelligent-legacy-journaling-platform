@@ -7,7 +7,6 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Image as ImageIcon, Calendar, Settings2, Download, Loader2, CheckCircle2 } from 'lucide-react';
-import { generateJournalPdf } from '@/lib/pdf-export';
 import { useAppStore } from '@/lib/store';
 import type { Journal, Entry, ExportOptions } from '@shared/types';
 import { toast } from 'sonner';
@@ -20,6 +19,7 @@ interface ExportDialogProps {
 export function ExportDialog({ open, onOpenChange, journal, entries }: ExportDialogProps) {
   const user = useAppStore(s => s.user);
   const logExport = useAppStore(s => s.logExport);
+  const exportJournalPdf = useAppStore(s => s.exportJournalPdf);
   const [isExporting, setIsExporting] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [options, setOptions] = useState<ExportOptions>({
@@ -35,14 +35,9 @@ export function ExportDialog({ open, onOpenChange, journal, entries }: ExportDia
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const doc = await generateJournalPdf(journal, entries, options);
-      doc.save(`${journal.title.toLowerCase().replace(/\s+/g, '-')}-archive.pdf`);
-      await logExport({
-        journalId: journal.id,
-        format: 'pdf',
-        status: 'success',
-        options
-      });
+      await exportJournalPdf(journal.id, options);
+      // Log after successful download trigger
+      await logExport({ journalId: journal.id, format: 'pdf', status: 'success', options });
       setIsFinished(true);
       toast.success('Journal archive generated successfully');
     } catch (error) {
@@ -157,7 +152,7 @@ export function ExportDialog({ open, onOpenChange, journal, entries }: ExportDia
                 disabled={isExporting} 
                 className="w-full bg-stone-900 text-white rounded-xl py-6"
               >
-                {isExporting ? <Loader2 className="animate-spin mr-2" /> : <Download size={18} className="mr-2" />}
+                {isExporting ? <span className="flex items-center"><Loader2 className="animate-spin mr-2" size={18} /> Edge Generation...</span> : <><Download size={18} className="mr-2" /> Generate Archive</>}
                 Generate Archive
               </Button>
             </DialogFooter>

@@ -58,6 +58,7 @@ interface AppState {
   fetchPromptHistory: () => Promise<void>;
   generateContextualPrompt: (journalId: string, templateId: string) => Promise<DailyContent>;
   logExport: (log: Partial<ExportLog>) => Promise<void>;
+  exportJournalPdf: (journalId: string, options: any) => Promise<void>;
   fetchExportHistory: () => Promise<void>;
   sendAiMessage: (content: string) => Promise<void>;
   clearChatHistory: () => void;
@@ -344,6 +345,31 @@ export const useAppStore = create<AppState>((set, get) => ({
       const log = await api<ExportLog>('/api/exports', { method: 'POST', body: JSON.stringify(data) });
       set(s => ({ exportHistory: [log, ...s.exportHistory] }));
     } catch (e) { console.error('Export logging failed', e); }
+  },
+  exportJournalPdf: async (journalId, opts) => {
+    set({ isSaving: true });
+    try {
+      const params = new URLSearchParams({
+        journalId,
+        title: opts.title || '',
+        author: opts.author || '',
+        message: opts.customMessage || '',
+        start: opts.startDate || '',
+        end: opts.endDate || '',
+        images: String(!!opts.includeImages),
+        tags: String(!!opts.includeTags),
+        contrast: String(!!opts.highContrast)
+      });
+      const blob = await api<Blob>(`/api/export/pdf?${params.toString()}`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${opts.title || 'journal'}-archive.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error('Secure transmission failed during archive generation.');
+    } finally { set({ isSaving: false }); }
   },
   fetchExportHistory: async () => {
     try {

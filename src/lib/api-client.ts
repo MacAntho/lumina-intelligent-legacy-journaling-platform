@@ -1,6 +1,7 @@
 import { ApiResponse } from "../../shared/types";
 interface ApiOptions extends RequestInit {
   silent?: boolean;
+  responseType?: 'json' | 'blob';
 }
 export async function api<T>(path: string, options?: ApiOptions): Promise<T> {
   const token = localStorage.getItem('lumina_token');
@@ -9,7 +10,7 @@ export async function api<T>(path: string, options?: ApiOptions): Promise<T> {
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  const { silent, ...init } = options || {};
+  const { silent, responseType = 'json', ...init } = options || {};
   try {
     const res = await fetch(path, { ...init, headers });
     if (res.status === 401 && !silent) {
@@ -19,6 +20,11 @@ export async function api<T>(path: string, options?: ApiOptions): Promise<T> {
         window.location.href = '/auth';
       }
     }
+    if (responseType === 'blob') {
+      if (!res.ok) throw new Error(`Transmission failed: ${res.status}`);
+      return (await res.blob()) as unknown as T;
+    }
+
     let json: ApiResponse<T>;
     const text = await res.text();
     try {

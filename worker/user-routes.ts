@@ -7,11 +7,13 @@ import {
   LegacyContactEntity, LegacyShareEntity, ExportLogEntity,
   LegacyAuditLogEntity, NotificationEntity,
   SavedSearchEntity, PromptEntity,
-  AiInsightEntity
+  AiInsightEntity,
+  EntryEntity
 } from "./entities";
 import { chatWithAssistant, analyzeJournalPatterns } from "./intelligence";
 import { ok, bad, notFound } from './core-utils';
 import type { LoginRequest, RegisterRequest, DailyContent, User, AnalysisRange } from "@shared/types";
+import { generateServerPdf } from "./pdf-service";
 const JWT_SECRET = "lumina-secret-key-change-this";
 async function hashPassword(password: string, salt: string) {
   const enc = new TextEncoder();
@@ -294,6 +296,44 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const payload = c.get('jwtPayload');
     return ok(c, await ExportLogEntity.listByUser(c.env, payload.userId));
   });
+  app.get('/api/export/pdf', async (c) => {
+    const payload = c.get('jwtPayload');
+    const journalId = c.req.query('journalId');
+    if (!journalId) return bad(c, 'Journal ID missing');
+
+    const journalInst = new JournalEntity(c.env, journalId);
+    const journal = await journalInst.getState();
+    if (journal.userId !== payload.userId) return bad(c, 'Unauthorized');
+
+    const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
+    
+    const options = {
+      title: c.req.query('title') || journal.title,
+      author: c.req.query('author') || 'Lumina Author',
+      includeImages: c.req.query('images') === 'true',
+      includeTags: c.req.query('tags') === 'true',
+      customMessage: c.req.query('message') || '',
+      highContrast: c.req.query('contrast') === 'true',
+      startDate: c.req.query('start'),
+      endDate: c.req.query('end')
+    };
+
+    try {
+      const pdfBytes = await generateServerPdf(journal, entries, options);
+      
+      return new Response(pdfBytes, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="${journal.title.toLowerCase().replace(/\s+/g, '-')}-archive.pdf"`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+    } catch (e) {
+      console.error('PDF Gen Error:', e);
+      return bad(c, 'Failed to generate archive');
+    }
+  });
+
   app.post('/api/exports', async (c) => {
     const payload = c.get('jwtPayload');
     const body = await c.req.json();
