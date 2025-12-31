@@ -7,7 +7,7 @@ import {
   LegacyContactEntity, LegacyShareEntity, ExportLogEntity,
   LegacyAuditLogEntity, NotificationEntity,
   SavedSearchEntity, PromptEntity,
-  AiInsightEntity
+  AiInsightEntity, SecurityLogEntity
 } from "./entities";
 import { chatWithAssistant, analyzeJournalPatterns } from "./intelligence";
 import { ok, bad, notFound } from './core-utils';
@@ -119,6 +119,37 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   // Protected Routes Middleware
   app.use('/api/*', jwt({ secret: JWT_SECRET }));
+  
+  // Security Auditor Middleware
+  app.use('/api/*', async (c, next) => {
+    const method = c.req.method;
+    if (['POST', 'PUT', 'DELETE'].includes(method)) {
+      const payload = c.get('jwtPayload');
+      if (payload?.userId) {
+        await SecurityLogEntity.create(c.env, {
+          id: crypto.randomUUID(),
+          userId: payload.userId,
+          event: method === 'DELETE' ? 'purge' : 'e2e_enabled', // Generic categorizing
+          ip: c.req.header('cf-connecting-ip') || '0.0.0.0',
+          userAgent: c.req.header('user-agent') || 'unknown',
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+    await next();
+  });
+
+  app.get('/api/users/me/export-all', async (c) => {
+    const payload = c.get('jwtPayload');
+    const [journals, entries, contacts, searches] = await Promise.all([
+      JournalEntity.listByUser(c.env, payload.userId),
+      EntryEntity.listByUser(c.env, payload.userId),
+      LegacyContactEntity.listByUser(c.env, payload.userId),
+      SavedSearchEntity.listByUser(c.env, payload.userId)
+    ]);
+    return ok(c, { journals, entries, contacts, searches, exportedAt: new Date().toISOString() });
+  });
+
   app.get('/api/auth/me', async (c) => {
     const payload = c.get('jwtPayload');
     const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);

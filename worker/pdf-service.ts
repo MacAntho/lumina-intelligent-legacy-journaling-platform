@@ -11,7 +11,6 @@ export async function generateServerPdf(
   entries: Entry[],
   options: ExportOptions
 ): Promise<Uint8Array> {
-  // @ts-expect-error - jspdf types in worker can be tricky
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',

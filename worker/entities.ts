@@ -1,5 +1,5 @@
 import { IndexedEntity, Env } from "./core-utils";
-import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog, LegacyAuditLog, AppNotification, SavedSearch, DailyContent, AiInsight } from "@shared/types";
+import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog, LegacyAuditLog, AppNotification, SavedSearch, DailyContent, AiInsight, SecurityLog } from "@shared/types";
 export interface UserAuthData {
   id: string; // email
   passwordHash: string;
@@ -13,6 +13,21 @@ export interface PromptRecord extends DailyContent {
   userId: string;
   type: 'daily' | 'contextual';
   createdAt: string;
+}
+export class SecurityLogEntity extends IndexedEntity<SecurityLog> {
+  static readonly entityName = "security-log";
+  static readonly indexName = "security-logs";
+  static readonly initialState: SecurityLog = {
+    id: "", userId: "", event: "login", ip: "", userAgent: "", timestamp: ""
+  };
+  static async listByUser(env: Env, userId: string): Promise<SecurityLog[]> {
+    const { items } = await this.list(env, null, 100);
+    return items.filter(l => l.userId === userId).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }
+  static async deleteManyByUser(env: Env, userId: string) {
+    const items = await this.listByUser(env, userId);
+    if (items.length > 0) await this.deleteMany(env, items.map(i => i.id));
+  }
 }
 export class UserAuthEntity extends IndexedEntity<UserAuthData> {
   static readonly entityName = "user-auth";
@@ -30,6 +45,9 @@ export class UserAuthEntity extends IndexedEntity<UserAuthData> {
         notificationsEnabled: true,
         language: 'en',
         onboardingCompleted: false,
+        e2eEnabled: false,
+        analyticsOptIn: true,
+        privacyLevel: 'standard',
         notificationSettings: {
           entry: true, prompt: true, affirmation: true, share: true, access: true, insight: true, export: true, reminder: true, limit: true, activity: true
         },
@@ -56,6 +74,7 @@ export class UserAuthEntity extends IndexedEntity<UserAuthData> {
     await SavedSearchEntity.deleteManyByUser(env, userId);
     await PromptEntity.deleteManyByUser(env, userId);
     await AiInsightEntity.deleteManyByUser(env, userId);
+    await SecurityLogEntity.deleteManyByUser(env, userId);
     await UserAuthEntity.delete(env, email.toLowerCase());
   }
 }

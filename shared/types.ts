@@ -29,6 +29,14 @@ export interface AppNotification {
   createdAt: string;
   metadata?: Record<string, any>;
 }
+export interface SecurityLog {
+  id: string;
+  userId: string;
+  event: 'login' | 'failed_login' | 'purge' | 'export' | 'password_reset' | 'e2e_enabled';
+  ip: string;
+  userAgent: string;
+  timestamp: string;
+}
 export interface SearchFilters {
   dateRange?: { start: string; end: string };
   moods?: string[];
@@ -52,6 +60,9 @@ export interface UserPreferences {
   language: 'en' | 'es' | 'fr' | 'de';
   defaultJournalId?: string;
   notificationSettings: Record<NotificationType, boolean>;
+  e2eEnabled: boolean;
+  analyticsOptIn: boolean;
+  privacyLevel: 'standard' | 'high';
   onboardingCompleted: boolean;
   tourStep?: number;
   quietHours: {
@@ -90,6 +101,8 @@ export interface Journal {
   title: string;
   description: string;
   type: JournalType;
+  isEncrypted: boolean;
+  encryptionVersion?: number;
   createdAt: string;
   lastEntryAt?: string;
 }
@@ -100,6 +113,8 @@ export interface Entry {
   title?: string;
   content: string;
   structuredData?: Record<string, any>;
+  isEncrypted?: boolean;
+  encryptionIV?: string;
   date: string;
   updatedAt?: string;
   mood: string;

@@ -4,9 +4,12 @@ import { toast } from 'sonner';
 import type {
   Journal, Entry, User, LegacyContact, InsightData, SavedSearch, AiInsight,
   LoginRequest, RegisterRequest, AuthResponse, AiMessage,
-  DailyContent, ExportLog, LegacyAuditLog, AppNotification
+  DailyContent, ExportLog, LegacyAuditLog, AppNotification,
+  ExportOptions
 } from '@shared/types';
+import { encryptContent, decryptContent } from './crypto';
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+let sessionKey: string | null = null;
 interface AppState {
   user: User | null;
   token: string | null;
@@ -39,6 +42,7 @@ interface AppState {
   resetPassword: (token: string, password: string) => Promise<void>;
   logout: () => void;
   deleteAccount: () => Promise<void>;
+  exportAllData: () => Promise<void>;
   heartbeat: () => Promise<void>;
   updateProfile: (profile: Partial<User>) => Promise<void>;
   fetchEntries: (journalId: string, params?: string) => Promise<void>;
@@ -113,6 +117,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         api<Entry[]>('/api/entries/all').catch(() => []),
         api<AiInsight[]>('/api/ai/insights/history').catch(() => [])
       ]);
+      
       set({
         user, journals, entries, legacyContacts: contacts, journalInsights: insights,
         isAuthenticated: true, isLoading: false, isInitialized: true,
@@ -146,6 +151,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isLoading: true });
     try {
       const res = await api<AuthResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify(req) });
+      sessionKey = req.password;
       localStorage.setItem('lumina_token', res.token);
       set({ user: res.user, token: res.token, isAuthenticated: true, isLoading: false, isInitialized: true, isTourActive: !res.user.preferences?.onboardingCompleted });
       toast.success('Sanctuary Unlocked');
@@ -160,6 +166,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isLoading: true });
     try {
       const res = await api<AuthResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify(req) });
+      sessionKey = req.password;
       localStorage.setItem('lumina_token', res.token);
       set({ user: res.user, token: res.token, isAuthenticated: true, isLoading: false, isInitialized: true, isTourActive: true });
       toast.success('Your digital legacy has begun.');
@@ -188,7 +195,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchEntries: async (journalId, params = '') => {
     try {
       const url = `/api/journals/${journalId}/entries${params ? `?${params}` : ''}`;
-      const entries = await api<Entry[]>(url);
+      let entries = await api<Entry[]>(url);
+      
+      if (sessionKey) {
+        entries = await Promise.all(entries.map(async (e) => {
+          if (e.isEncrypted) {
+            try {
+              const decrypted = await decryptContent(e.content, sessionKey!);
+              return { ...e, content: decrypted };
+            } catch { return e; }
+          }
+          return e;
+        }));
+      }
       set({ entries });
     } catch (error) {
       console.error(`Failed to fetch entries for journal ${journalId}`, error);
@@ -238,10 +257,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   addEntry: async (entryData) => {
     set({ isSaving: true });
+    const journal = get().journals.find(j => j.id === entryData.journalId);
+    let payload = { ...entryData };
+    
+    if (journal?.isEncrypted && sessionKey && payload.content) {
+      try {
+        const encrypted = await encryptContent(payload.content, sessionKey);
+        payload.content = encrypted;
+        payload.isEncrypted = true;
+      } catch (e) { toast.error("Encryption failed"); set({ isSaving: false }); return; }
+    }
+
     try {
-      const entry = await api<Entry>(`/api/journals/${entryData.journalId}/entries`, { method: 'POST', body: JSON.stringify(entryData) });
+      const entry = await api<Entry>(`/api/journals/${entryData.journalId}/entries`, { method: 'POST', body: JSON.stringify(payload) });
+      const displayEntry = journal?.isEncrypted ? { ...entry, content: entryData.content || '' } : entry;
       set(state => ({
-        entries: [entry, ...state.entries],
+        entries: [displayEntry, ...state.entries],
         journals: state.journals.map(j => j.id === entry.journalId ? { ...j, lastEntryAt: entry.date } : j),
         isSaving: false
       }));
@@ -253,6 +284,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   logout: () => {
     if (heartbeatInterval) clearInterval(heartbeatInterval);
+    sessionKey = null;
     localStorage.removeItem('lumina_token');
     localStorage.removeItem('lumina_chat');
     localStorage.removeItem('lumina_drafts');
@@ -276,6 +308,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ isSaving: false });
       console.error('Account deletion failed', e);
     }
+  },
+  exportAllData: async () => {
+    try {
+      const data = await api<any>('/api/users/me/export-all');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lumina-full-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+    } catch (e) { toast.error("Export compilation failed"); }
   },
   setDraft: (journalId, draft) => {
     const next = { ...get().drafts, [journalId]: draft };

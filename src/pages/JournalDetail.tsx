@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Send, Sparkles, Loader2, Download, Star, Book, Maximize2, Minimize2, Type, X } from 'lucide-react';
+import { ChevronLeft, Send, Sparkles, Loader2, Download, Star, Book, Maximize2, Minimize2, Type, X, Shield, Lock } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { format, isThisWeek, isThisMonth } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -51,7 +51,7 @@ export function JournalDetail() {
       }
       fetchEntries(id);
     }
-  }, [id, fetchEntries]); // Explicitly NOT depend on drafts to avoid typing-sync loops
+  }, [id, fetchEntries, drafts]);
   // Autosave Logic (Debounced)
   useEffect(() => {
     if (!id || !title && Object.keys(formData).length === 0) return;
@@ -131,6 +131,9 @@ export function JournalDetail() {
                   <IconComponent size={16} />
                 </div>
                 <h1 className="text-4xl font-serif font-medium text-stone-900">{journal.title}</h1>
+                {journal.isEncrypted && (
+                  <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-100 gap-1.5 ml-2"><Lock size={10} /> Secured</Badge>
+                )}
               </div>
             </div>
           ) : (
@@ -251,6 +254,11 @@ export function JournalDetail() {
                         <div className="absolute left-[-20px] top-0 bottom-0 w-1 bg-stone-100 rounded-full group-hover:bg-stone-900 transition-colors" />
                         <div className="flex flex-col gap-2">
                           <time className="text-[10px] text-stone-400 font-medium">{format(new Date(entry.date), 'EEEE, MMM dd, yyyy')}</time>
+                          {entry.isEncrypted && (
+                            <div className="flex items-center gap-1 text-[8px] font-bold text-emerald-500 uppercase tracking-widest mb-1">
+                              <Shield size={10} /> E2E Encrypted
+                            </div>
+                          )}
                           <h4 className="text-2xl font-serif text-stone-900">{entry.title}</h4>
                           <div className="text-stone-500 font-serif leading-relaxed line-clamp-3 text-sm">
                             {entry.content.replace(/\*\*(.*?)\*\*/g, '$1')}

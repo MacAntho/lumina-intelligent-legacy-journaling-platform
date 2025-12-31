@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Settings, Moon, Bell, Shield, Download, Trash2, Loader2, Footprints, Database, AlertTriangle, RefreshCw, GraduationCap } from 'lucide-react';
+import { Settings, Moon, Bell, Shield, Download, Trash2, Loader2, Footprints, Database, AlertTriangle, RefreshCw, GraduationCap, Lock, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 export function SettingsPage() {
@@ -27,6 +27,7 @@ export function SettingsPage() {
   const entries = useAppStore(s => s.entries);
   const updateProfile = useAppStore(s => s.updateProfile);
   const restartTour = useAppStore(s => s.restartTour);
+  const exportAllData = useAppStore(s => s.exportAllData);
   const deleteAccount = useAppStore(s => s.deleteAccount);
   const navigate = useNavigate();
   const handlePreferenceChange = async (key: string, value: any) => {
@@ -35,25 +36,17 @@ export function SettingsPage() {
     // Fix: Properly wrap preferences in the User update object
     await updateProfile({ preferences: newPrefs });
   };
+  const handleRequestExport = async () => {
+    toast.promise(exportAllData(), {
+      loading: 'Compiling all archives...',
+      success: 'Sanctuary archive delivered.',
+      error: 'Transmission failed.'
+    });
+  };
   const handleRestartTour = async () => {
     await restartTour();
     navigate('/dashboard');
     toast.success('Onboarding tour restarted.');
-  };
-  const handleExportFullSanctuary = () => {
-    const data = {
-      profile: user,
-      journals,
-      entries,
-      exportedAt: new Date().toISOString()
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `lumina-full-export-${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
-    toast.success('Sanctuary archive compiled successfully.');
   };
   return (
     <AppLayout container>
@@ -98,6 +91,23 @@ export function SettingsPage() {
                       <SelectItem value="system">System</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-3xl border-stone-200 shadow-sm bg-white/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg font-serif"><Lock size={18} /> Privacy & Security</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm">E2E Content Encryption</Label>
+                    <p className="text-[10px] text-stone-400">Lock archives with your unique key.</p>
+                  </div>
+                  <Switch 
+                    checked={user?.preferences?.e2eEnabled} 
+                    onCheckedChange={(v) => handlePreferenceChange('e2eEnabled', v)} 
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -152,12 +162,12 @@ export function SettingsPage() {
               </CardContent>
             </Card>
             <Card className="rounded-3xl border-rose-100 shadow-sm bg-rose-50/20 border-dashed">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg font-serif text-rose-900"><AlertTriangle size={18} /> Danger Zone</CardTitle>
-              </CardHeader>
+              <div className="p-6 pb-2">
+                <h3 className="flex items-center gap-2 text-lg font-serif text-rose-900"><AlertTriangle size={18} /> GDPR & Data Rights</h3>
+              </div>
               <CardContent className="space-y-3">
-                <Button variant="outline" onClick={handleExportFullSanctuary} className="w-full justify-start gap-2 rounded-xl text-xs h-10 border-stone-200 hover:bg-white">
-                  <Download size={14} /> Export All Sanctuary Data (.json)
+                <Button variant="outline" onClick={handleRequestExport} className="w-full justify-start gap-2 rounded-xl text-xs h-10 border-stone-200 hover:bg-white">
+                  <Share2 size={14} /> Request Full Data Export (.json)
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
