@@ -62,68 +62,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const token = await sign({ userId: userAuth.profile.id, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
     return ok(c, { user: updatedProfile, token });
   });
-  app.get('/api/public/legacy/:shareId', async (c) => {
-    const shareId = c.req.param('shareId');
-    const key = c.req.query('key');
-    const shareInst = new LegacyShareEntity(c.env, shareId);
-    if (!(await shareInst.exists())) return notFound(c, 'Legacy archive not found');
-    const share = await shareInst.getState();
-    if (share.accessKey !== key) return bad(c, 'Invalid access key');
-    const journal = await new JournalEntity(c.env, share.journalId).getState();
-    const passwordRequired = !!share.passwordHash;
-    const metadata = {
-      journalTitle: journal.title,
-      authorName: "A Lumina Resident",
-      permissions: share.permissions,
-      passwordRequired,
-      passwordHint: share.passwordHint,
-      expiresAt: share.expiresAt
-    };
-    if (passwordRequired) return ok(c, metadata);
-    await LegacyAuditLogEntity.create(c.env, {
-      id: crypto.randomUUID(),
-      userId: share.userId,
-      shareId: share.id,
-      journalId: share.journalId,
-      recipientEmail: share.recipientEmail,
-      action: 'view',
-      timestamp: new Date().toISOString()
-    });
-    await NotificationEntity.create(c.env, {
-      id: crypto.randomUUID(),
-      userId: share.userId,
-      type: 'access',
-      title: 'Legacy Archive Accessed',
-      message: `Your journal "${journal.title}" was viewed by a recipient.`,
-      isRead: false,
-      createdAt: new Date().toISOString()
-    });
-    const entries = await EntryEntity.listByJournal(c.env, share.journalId, share.userId);
-    return ok(c, { ...metadata, entries: entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()) });
-  });
-  app.post('/api/public/legacy/:shareId/verify', async (c) => {
-    const shareId = c.req.param('shareId');
-    const { password } = await c.req.json();
-    const shareInst = new LegacyShareEntity(c.env, shareId);
-    if (!(await shareInst.exists())) return notFound(c);
-    const share = await shareInst.getState();
-    if (share.passwordHash) {
-      const hash = await hashPassword(password, "legacy-salt");
-      if (hash !== share.passwordHash) return bad(c, 'Access Denied');
-    }
-    const journal = await new JournalEntity(c.env, share.journalId).getState();
-    await LegacyAuditLogEntity.create(c.env, {
-      id: crypto.randomUUID(),
-      userId: share.userId,
-      shareId: share.id,
-      journalId: share.journalId,
-      recipientEmail: share.recipientEmail,
-      action: 'view',
-      timestamp: new Date().toISOString()
-    });
-    const entries = await EntryEntity.listByJournal(c.env, share.journalId, share.userId);
-    return ok(c, { journalTitle: journal.title, authorName: "A Lumina Resident", entries, permissions: share.permissions });
-  });
   app.get('/api/searches', async (c) => {
     const payload = c.get('jwtPayload');
     return ok(c, await SavedSearchEntity.listByUser(c.env, payload.userId));
@@ -152,44 +90,16 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const audits = await LegacyAuditLogEntity.listByUser(c.env, userId);
     const exports = await ExportLogEntity.listByUser(c.env, userId);
     const journals = await JournalEntity.listByUser(c.env, userId);
-
     const stream: any[] = [
-      ...notes.map(n => ({ id: n.id, type: 'system' as const, title: n.title, message: n.message, timestamp: n.createdAt, metadata: { noteType: n.type } })),
-      ...audits.map(a => ({ id: a.id, type: 'transmission' as const, title: 'Legacy Access', message: `Archive for "${journals.find(j => j.id === a.journalId)?.title || 'Journal'}" was ${a.action}ed by ${a.recipientEmail}`, timestamp: a.timestamp, metadata: { action: a.action, email: a.recipientEmail } })),
-      ...exports.map(e => ({ id: e.id, type: 'export' as const, title: 'Journal Export', message: `Exported to ${e.format.toUpperCase()} (${e.status})`, timestamp: e.timestamp, metadata: { format: e.format, status: e.status } }))
+      ...notes.map(n => ({ id: n.id, type: 'system' as const, title: n.title, message: n.message, timestamp: n.createdAt })),
+      ...audits.map(a => ({ id: a.id, type: 'transmission' as const, title: 'Legacy Access', message: `Archive for "${journals.find(j => j.id === a.journalId)?.title || 'Journal'}" was ${a.action}ed by ${a.recipientEmail}`, timestamp: a.timestamp })),
+      ...exports.map(e => ({ id: e.id, type: 'export' as const, title: 'Journal Export', message: `Exported to ${e.format.toUpperCase()} (${e.status})`, timestamp: e.timestamp }))
     ];
     return ok(c, stream.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 50));
   });
   app.get('/api/notifications', async (c) => {
     const payload = c.get('jwtPayload');
     return ok(c, await NotificationEntity.listByUser(c.env, payload.userId));
-  });
-  app.patch('/api/notifications/:id/read', async (c) => {
-    const id = c.req.param('id');
-    const note = new NotificationEntity(c.env, id);
-    if (await note.exists()) {
-      await note.patch({ isRead: true });
-      return ok(c, true);
-    }
-    return notFound(c);
-  });
-  app.post('/api/notifications/read-all', async (c) => {
-    const payload = c.get('jwtPayload');
-    await NotificationEntity.markAllAsRead(c.env, payload.userId);
-    return ok(c, true);
-  });
-  app.delete('/api/notifications/:id', async (c) => {
-    const id = c.req.param('id');
-    await NotificationEntity.delete(c.env, id);
-    return ok(c, true);
-  });
-  app.put('/api/auth/heartbeat', async (c) => {
-    const payload = c.get('jwtPayload');
-    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
-    if (!userAuth) return notFound(c);
-    const updatedProfile = { ...userAuth.profile, lastHeartbeatAt: new Date().toISOString() };
-    await new UserAuthEntity(c.env, payload.email).patch({ profile: updatedProfile });
-    return ok(c, updatedProfile);
   });
   app.get('/api/auth/me', async (c) => {
     const payload = c.get('jwtPayload');
@@ -200,29 +110,18 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const payload = c.get('jwtPayload');
     return ok(c, await JournalEntity.listByUser(c.env, payload.userId));
   });
-  app.post('/api/journals', async (c) => {
-    const payload = c.get('jwtPayload');
-    const body = await c.req.json();
-    const journal = await JournalEntity.create(c.env, {
-      ...body,
-      id: crypto.randomUUID(),
-      userId: payload.userId,
-      createdAt: new Date().toISOString()
-    });
-    return ok(c, journal);
-  });
   app.get('/api/journals/:id/entries', async (c) => {
     const payload = c.get('jwtPayload');
     const journalId = c.req.param('id');
     const q = c.req.query('q')?.toLowerCase();
-    const tag = c.req.query('tag');
-    const mood = c.req.query('mood');
+    const tag = c.req.query('tag')?.toLowerCase();
+    const mood = c.req.query('mood')?.toLowerCase();
     const minWords = parseInt(c.req.query('minWords') || '0');
     const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
     let filtered = entries;
     if (q) filtered = filtered.filter(e => e.content.toLowerCase().includes(q) || e.title?.toLowerCase().includes(q));
-    if (tag) filtered = filtered.filter(e => e.tags.includes(tag));
-    if (mood) filtered = filtered.filter(e => e.mood === mood);
+    if (tag) filtered = filtered.filter(e => e.tags?.some(t => t.toLowerCase() === tag));
+    if (mood) filtered = filtered.filter(e => e.mood?.toLowerCase().includes(mood));
     if (minWords > 0) filtered = filtered.filter(e => (e.wordCount || 0) >= minWords);
     return ok(c, filtered);
   });
@@ -278,12 +177,15 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const shareId = crypto.randomUUID();
     const accessKey = Math.random().toString(36).slice(-8);
     let passwordHash: string | undefined;
-    if (password) passwordHash = await hashPassword(password, "legacy-salt");
+    if (password) {
+      const enc = new TextEncoder();
+      const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits", "deriveKey"]);
+      const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: enc.encode("legacy-salt"), iterations: 100000, hash: "SHA-256" }, keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "deriveKey"]);
+      const exported = await crypto.subtle.exportKey("raw", key);
+      passwordHash = btoa(String.fromCharCode(...new Uint8Array(exported)));
+    }
     const expiresAt = expiryDays > 0 ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString() : undefined;
     const share = await LegacyShareEntity.create(c.env, { id: shareId, journalId, userId: payload.userId, recipientEmail, accessKey, permissions, passwordHash, passwordHint, expiresAt, viewCount: 0, createdAt: new Date().toISOString() });
-    const journal = await new JournalEntity(c.env, journalId).getState();
-    await NotificationEntity.create(c.env, { id: crypto.randomUUID(), userId: payload.userId, type: 'share', title: 'Legacy Link Generated', message: `Archive for "${journal.title}" created.`, isRead: false, createdAt: new Date().toISOString() });
-    await LegacyAuditLogEntity.create(c.env, { id: crypto.randomUUID(), userId: payload.userId, shareId, journalId, recipientEmail, action: 'create', timestamp: new Date().toISOString() });
     return ok(c, share);
   });
   app.get('/api/legacy/audit', async (c) => {
@@ -305,16 +207,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     await LegacyContactEntity.delete(c.env, id);
     return ok(c, true);
   });
-  app.get('/api/exports', async (c) => {
-    const payload = c.get('jwtPayload');
-    return ok(c, await ExportLogEntity.listByUser(c.env, payload.userId));
-  });
   app.post('/api/exports', async (c) => {
     const payload = c.get('jwtPayload');
     const body = await c.req.json();
     const log = await ExportLogEntity.create(c.env, { ...body, id: crypto.randomUUID(), userId: payload.userId, timestamp: new Date().toISOString() });
-    const journal = await new JournalEntity(c.env, body.journalId).getState();
-    await NotificationEntity.create(c.env, { id: crypto.randomUUID(), userId: payload.userId, type: 'export', title: 'Archive Exported', message: `"${journal.title}" exported to PDF.`, isRead: false, createdAt: new Date().toISOString() });
     return ok(c, log);
   });
 }

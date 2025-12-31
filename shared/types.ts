@@ -19,6 +19,7 @@ export interface AppNotification {
 export interface SearchFilters {
   dateRange?: { start: string; end: string };
   moods?: string[];
+  minStars?: number;
   templateIds?: string[];
   hasImages?: boolean;
   tags?: string[];

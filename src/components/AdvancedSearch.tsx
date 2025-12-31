@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, SlidersHorizontal, X, History, Star, Bookmark, Calendar, ImageIcon, Type, Sparkles } from 'lucide-react';
+import { Search, SlidersHorizontal, History, Star, Bookmark, Calendar, Type, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/lib/store';
-import { JOURNAL_TEMPLATES } from '@shared/templates';
 import { cn } from '@/lib/utils';
 import type { SearchFilters } from '@shared/types';
 interface AdvancedSearchProps<T> {
@@ -18,10 +16,10 @@ interface AdvancedSearchProps<T> {
   placeholder?: string;
   context?: 'global' | 'journal';
 }
-export function AdvancedSearch<T extends Record<string, any>>({ 
-  items, 
-  onResults, 
-  searchFields, 
+export function AdvancedSearch<T extends Record<string, any>>({
+  items,
+  onResults,
+  searchFields,
   placeholder = "Search your thoughts...",
   context = 'global'
 }: AdvancedSearchProps<T>) {
@@ -34,7 +32,7 @@ export function AdvancedSearch<T extends Record<string, any>>({
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({});
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  // Simple fuzzy search + filter logic
+  // Compute results. We use useMemo to prevent unnecessary calculations.
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       // 1. Text Search
@@ -44,38 +42,51 @@ export function AdvancedSearch<T extends Record<string, any>>({
         return val && String(val).toLowerCase().includes(searchStr);
       });
       if (!matchesText) return false;
-      // 2. Metadata Filters
-      if (filters.moods?.length && !filters.moods.includes(item.mood)) return false;
-      if (filters.templateIds?.length && !filters.templateIds.includes(item.templateId)) return false;
-      if (filters.hasImages && (!item.images || item.images.length === 0)) return false;
-      if (filters.minWordCount && (item.wordCount || 0) < filters.minWordCount) return false;
-      if (filters.tags?.length && !filters.tags.some(t => item.tags?.includes(t))) return false;
+      // 2. Metadata Filters (Contextual)
+      if (context === 'journal') {
+        if (filters.moods?.length && !filters.moods.includes(item.mood)) return false;
+        if (filters.minStars && (item.structuredData?.mood_score || item.structuredData?.intensity || 0) < filters.minStars) return false;
+        if (filters.hasImages && (!item.images || item.images.length === 0)) return false;
+        if (filters.minWordCount && (item.wordCount || 0) < filters.minWordCount) return false;
+        if (filters.tags?.length && !filters.tags.some((t: string) => item.tags?.includes(t))) return false;
+      }
       if (filters.dateRange) {
-        const itemDate = new Date(item.date || item.createdAt).getTime();
-        const start = new Date(filters.dateRange.start).getTime();
-        const end = new Date(filters.dateRange.end).getTime();
-        if (itemDate < start || itemDate > end) return false;
+        const dateVal = item.date || item.createdAt;
+        if (dateVal) {
+          const itemTime = new Date(dateVal).getTime();
+          if (filters.dateRange.start) {
+            const startTime = new Date(filters.dateRange.start).getTime();
+            if (itemTime < startTime) return false;
+          }
+          if (filters.dateRange.end) {
+            const endTime = new Date(filters.dateRange.end).getTime();
+            if (itemTime > endTime) return false;
+          }
+        }
       }
       return true;
     });
-  }, [items, query, filters, searchFields]);
+  }, [items, query, filters, searchFields, context]);
+  // Stable result reporting. 
+  // We use stringify to compare the result set to avoid re-triggering parent renders if results haven't actually changed.
+  const resultSignature = JSON.stringify(filteredItems.map(i => i.id).sort());
   useEffect(() => {
     onResults(filteredItems);
-  }, [filteredItems, onResults]);
+  }, [resultSignature, onResults]); // onResults must be stable (from parent)
   const handleApplySaved = (saved: any) => {
     setQuery(saved.query);
     setFilters(saved.filters);
     setIsDropdownOpen(false);
   };
   const handleSaveCurrent = () => {
-    const name = query || 'Custom Search';
+    const name = query || `Search ${format(new Date(), 'HH:mm')}`;
     saveSearch({ name, query, filters });
   };
-  const toggleFilter = (key: keyof SearchFilters, value: any) => {
+  const toggleFilterArray = (key: 'moods' | 'tags' | 'templateIds', value: string) => {
     setFilters(prev => {
-      const current = (prev[key] as any[]) || [];
-      const next = current.includes(value) 
-        ? current.filter(v => v !== value) 
+      const current = (prev[key] as string[]) || [];
+      const next = current.includes(value)
+        ? current.filter(v => v !== value)
         : [...current, value];
       return { ...prev, [key]: next };
     });
@@ -85,7 +96,7 @@ export function AdvancedSearch<T extends Record<string, any>>({
       <div className="relative flex items-center gap-2">
         <div className="relative flex-1 group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 group-focus-within:text-stone-900 transition-colors" size={18} />
-          <Input 
+          <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => setIsDropdownOpen(true)}
@@ -96,7 +107,7 @@ export function AdvancedSearch<T extends Record<string, any>>({
           />
           <AnimatePresence>
             {isDropdownOpen && (recentSearches.length > 0 || savedSearches.length > 0) && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 5 }}
@@ -131,7 +142,7 @@ export function AdvancedSearch<T extends Record<string, any>>({
             )}
           </AnimatePresence>
         </div>
-        <Button 
+        <Button
           variant={showFilters ? 'secondary' : 'outline'}
           onClick={() => setShowFilters(!showFilters)}
           className="h-[60px] w-[60px] rounded-2xl border-stone-200"
@@ -148,65 +159,85 @@ export function AdvancedSearch<T extends Record<string, any>>({
             className="overflow-hidden"
           >
             <div className="bg-stone-50 border border-stone-200 rounded-3xl p-6 grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="space-y-4">
-                <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
-                  <Sparkles size={12} /> Emotional Map
-                </Label>
-                <div className="flex flex-wrap gap-2">
-                  {['High', 'Normal', 'Low', 'Inspired', 'Tired'].map(m => (
-                    <Badge 
-                      key={m}
-                      variant={filters.moods?.includes(m) ? 'default' : 'outline'}
-                      className="cursor-pointer rounded-full px-3 py-1 text-[10px]"
-                      onClick={() => toggleFilter('moods', m)}
-                    >
-                      {m}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-4">
-                <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
-                  <Type size={12} /> Writing Depth
-                </Label>
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-stone-600">Deep Dives (&gt; 250 words)</span>
-                    <Checkbox 
-                      checked={filters.minWordCount === 250} 
-                      onCheckedChange={(v) => setFilters(f => ({ ...f, minWordCount: v ? 250 : 0 }))} 
-                    />
+              {context === 'journal' && (
+                <>
+                  <div className="space-y-4">
+                    <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
+                      <Sparkles size={12} /> Emotional Map
+                    </Label>
+                    <div className="flex flex-wrap gap-2">
+                      {['High', 'Normal', 'Low', 'Inspired', 'Tired'].map(m => (
+                        <Badge
+                          key={m}
+                          variant={filters.moods?.includes(m) ? 'default' : 'outline'}
+                          className="cursor-pointer rounded-full px-3 py-1 text-[10px]"
+                          onClick={() => toggleFilterArray('moods', m)}
+                        >
+                          {m}
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="pt-2">
+                      <Label className="text-[9px] text-stone-400 uppercase font-bold">Min Intensity</Label>
+                      <div className="flex gap-1 mt-1">
+                        {[1, 2, 3, 4, 5].map(star => (
+                          <button
+                            key={star}
+                            onClick={() => setFilters(f => ({ ...f, minStars: f.minStars === star ? 0 : star }))}
+                            className={cn("p-1", (filters.minStars || 0) >= star ? "text-amber-500" : "text-stone-300")}
+                          >
+                            <Star size={14} fill={(filters.minStars || 0) >= star ? "currentColor" : "none"} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-stone-600">Visual Memories</span>
-                    <Checkbox 
-                      checked={!!filters.hasImages} 
-                      onCheckedChange={(v) => setFilters(f => ({ ...f, hasImages: !!v }))} 
-                    />
+                  <div className="space-y-4">
+                    <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
+                      <Type size={12} /> Writing Depth
+                    </Label>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-stone-600">Deep Dives (&gt; 250 words)</span>
+                        <Checkbox
+                          checked={filters.minWordCount === 250}
+                          onCheckedChange={(v) => setFilters(f => ({ ...f, minWordCount: v ? 250 : 0 }))}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-stone-600">Visual Memories</span>
+                        <Checkbox
+                          checked={!!filters.hasImages}
+                          onCheckedChange={(v) => setFilters(f => ({ ...f, hasImages: !!v }))}
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div className="space-y-4">
+                </>
+              )}
+              <div className={cn("space-y-4", context === 'global' && "md:col-span-2")}>
                 <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
                   <Calendar size={12} /> Discovery Range
                 </Label>
                 <div className="grid grid-cols-2 gap-2">
-                  <Input 
-                    type="date" 
+                  <Input
+                    type="date"
                     className="h-8 text-[10px] rounded-lg border-stone-200"
-                    onChange={(e) => setFilters(f => ({ ...f, dateRange: { ...f.dateRange!, start: e.target.value } }))}
+                    value={filters.dateRange?.start || ''}
+                    onChange={(e) => setFilters(f => ({ ...f, dateRange: { ...(f.dateRange || { start: '', end: '' }), start: e.target.value } }))}
                   />
-                  <Input 
-                    type="date" 
+                  <Input
+                    type="date"
                     className="h-8 text-[10px] rounded-lg border-stone-200"
-                    onChange={(e) => setFilters(f => ({ ...f, dateRange: { ...f.dateRange!, end: e.target.value } }))}
+                    value={filters.dateRange?.end || ''}
+                    onChange={(e) => setFilters(f => ({ ...f, dateRange: { ...(f.dateRange || { start: '', end: '' }), end: e.target.value } }))}
                   />
                 </div>
                 <Button variant="ghost" className="w-full text-[10px] uppercase font-bold h-8" onClick={() => setFilters({})}>Reset Filters</Button>
               </div>
               <div className="md:col-span-3 pt-4 border-t border-stone-200 flex justify-between items-center">
                 <span className="text-xs text-stone-400 font-serif italic">
-                  {filteredItems.length} matching reflections found in your sanctuary.
+                  {filteredItems.length} matching items found in your sanctuary.
                 </span>
                 <Button size="sm" onClick={handleSaveCurrent} className="rounded-full bg-stone-900 text-white text-[10px] h-8 px-4">
                   <Star size={12} className="mr-2" /> Save this Pattern
@@ -218,4 +249,9 @@ export function AdvancedSearch<T extends Record<string, any>>({
       </AnimatePresence>
     </div>
   );
+}
+function format(date: Date, formatStr: string) {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  if (formatStr === 'HH:mm') return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return date.toISOString();
 }

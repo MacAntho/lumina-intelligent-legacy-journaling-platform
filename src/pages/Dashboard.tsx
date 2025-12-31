@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
-import { Card, CardHeader, CardTitle, CardDescription, CardFooter, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, Calendar, TrendingUp, Trash2, Loader2, Library, Check, ChevronRight, Book, Sparkles, RefreshCw, ArrowRight } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
@@ -15,6 +15,7 @@ import { JOURNAL_TEMPLATES, type JournalTemplate } from '@shared/templates';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { AdvancedSearch } from '@/components/AdvancedSearch';
+import type { Journal } from '@shared/types';
 export function Dashboard() {
   const journals = useAppStore((s) => s.journals);
   const isLoading = useAppStore((s) => s.isLoading);
@@ -25,12 +26,18 @@ export function Dashboard() {
   const addJournal = useAppStore((s) => s.addJournal);
   const deleteJournal = useAppStore((s) => s.deleteJournal);
   const navigate = useNavigate();
-  const [filteredJournals, setFilteredJournals] = useState<any[]>([]);
+  const [filteredJournals, setFilteredJournals] = useState<Journal[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [step, setStep] = useState<'template' | 'config'>('template');
   const [selectedTemplate, setSelectedTemplate] = useState<JournalTemplate>(JOURNAL_TEMPLATES[0]);
   const [customTitle, setCustomTitle] = useState('');
   const [customDesc, setCustomDesc] = useState('');
+  // Update initial filtered journals when journals arrive from store
+  useEffect(() => {
+    if (journals.length > 0 && filteredJournals.length === 0) {
+      setFilteredJournals(journals);
+    }
+  }, [journals]);
   const handleCreate = async () => {
     await addJournal({
       title: customTitle || selectedTemplate.defaultTitle,
@@ -40,8 +47,6 @@ export function Dashboard() {
     });
     setIsCreateOpen(false);
     setStep('template');
-    setCustomTitle('');
-    setCustomDesc('');
   };
   const selectTemplate = (t: JournalTemplate) => {
     setSelectedTemplate(t);
@@ -49,6 +54,9 @@ export function Dashboard() {
     setCustomDesc(t.description);
     setStep('config');
   };
+  const onSearchResults = useCallback((results: Journal[]) => {
+    setFilteredJournals(results);
+  }, []);
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const firstName = user?.name?.split(' ')[0] ?? 'Explorer';
@@ -126,15 +134,14 @@ export function Dashboard() {
             </Dialog>
           </div>
         </header>
-
         <section className="bg-stone-50/30 rounded-4xl p-1 border border-stone-100">
-          <AdvancedSearch 
-            items={journals} 
-            onResults={setFilteredJournals} 
+          <AdvancedSearch
+            items={journals}
+            onResults={onSearchResults}
             searchFields={['title', 'description']}
+            context="global"
           />
         </section>
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="group">
             <Card className="h-full rounded-4xl border-none bg-stone-900 text-white shadow-2xl relative overflow-hidden p-8">
@@ -196,11 +203,15 @@ export function Dashboard() {
               </div>
             </Card>
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
-              {journals.length === 0 ? (
+              {filteredJournals.length === 0 ? (
                 <div className="md:col-span-2 py-20 border-2 border-dashed border-stone-200 rounded-3xl flex flex-col items-center justify-center text-center space-y-4">
                   <div className="h-16 w-16 rounded-2xl bg-stone-50 flex items-center justify-center text-stone-300"><Library size={32} /></div>
-                  <h3 className="text-xl font-medium text-stone-900">Your library is empty</h3>
-                  <Button onClick={() => setIsCreateOpen(true)} variant="outline" className="rounded-full">Initialize First Journal</Button>
+                  <h3 className="text-xl font-medium text-stone-900">
+                    {journals.length > 0 ? "No matches found in your library" : "Your library is empty"}
+                  </h3>
+                  <Button onClick={() => setIsCreateOpen(true)} variant="outline" className="rounded-full">
+                    {journals.length > 0 ? "Clear Search or Create New" : "Initialize First Journal"}
+                  </Button>
                 </div>
               ) : (
                 <>

@@ -17,6 +17,7 @@ import { JOURNAL_TEMPLATES } from '@shared/templates';
 import { ExportDialog } from '@/components/ExportDialog';
 import { AdvancedSearch } from '@/components/AdvancedSearch';
 import { cn } from '@/lib/utils';
+import type { Entry } from '@shared/types';
 export function JournalDetail() {
   const { id } = useParams();
   const journals = useAppStore(s => s.journals);
@@ -34,7 +35,7 @@ export function JournalDetail() {
   const [images, setImages] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
-  const [filteredEntries, setFilteredEntries] = useState<any[]>([]);
+  const [filteredEntries, setFilteredEntries] = useState<Entry[]>([]);
   const [exportOpen, setExportOpen] = useState(false);
   useEffect(() => {
     if (id && drafts[id]) {
@@ -46,9 +47,7 @@ export function JournalDetail() {
     }
   }, [id, drafts]);
   useEffect(() => {
-    if (id) {
-      fetchEntries(id);
-    }
+    if (id) fetchEntries(id);
   }, [id, fetchEntries]);
   useEffect(() => {
     const timer = setInterval(() => {
@@ -66,10 +65,8 @@ export function JournalDetail() {
       return `**${field.label}:** ${val}`;
     }).filter(Boolean);
     const content = summaryParts.join('\n');
-
     const moodValue = formData.mood_score || formData.intensity || 'Normal';
     const moodDescriptor = typeof moodValue === 'number' ? `${moodValue} Stars` : String(moodValue);
-
     await addEntry({
       journalId: id,
       title: title || `Reflection ${format(new Date(), 'MMM dd')}`,
@@ -85,16 +82,6 @@ export function JournalDetail() {
     setImages([]);
     toast.success('Reflection preserved.');
   };
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImages(prev => [...prev, reader.result as string]);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
   const toggleRecording = () => {
     if (!('webkitSpeechRecognition' in window)) {
       toast.error('Speech recognition not supported in this browser.');
@@ -103,7 +90,6 @@ export function JournalDetail() {
     const SpeechRecognition = (window as any).webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
-    recognition.interimResults = false;
     recognition.onstart = () => setIsRecording(true);
     recognition.onend = () => setIsRecording(false);
     recognition.onresult = (event: any) => {
@@ -111,29 +97,17 @@ export function JournalDetail() {
       const firstTextarea = template.fields.find(f => f.type === 'textarea')?.id || 'content';
       setFormData(prev => ({ ...prev, [firstTextarea]: (prev[firstTextarea] || '') + ' ' + transcript }));
     };
-    if (isRecording) {
-      recognition.stop();
-    } else {
-      recognition.start();
-    }
+    if (isRecording) recognition.stop(); else recognition.start();
   };
-  const updateField = useCallback((fieldId: string, value: any, type?: string) => {
-    let finalValue = value;
-    // Ensure numeric types are strictly cast for AI Insight consumption
-    if (type === 'number' || fieldId === 'mood_score' || fieldId === 'intensity') finalValue = value === '' ? 0 : Number(value);
-    setFormData(prev => ({ ...prev, [fieldId]: finalValue }));
+  const onSearchResults = useCallback((results: Entry[]) => {
+    setFilteredEntries(results);
   }, []);
   const renderMarkdown = (text: string) => {
     if (!text) return null;
     return text.split('\n').map((line, i) => {
       const boldMatch = line.match(/^\*\*(.*?)\*\*(.*)/);
       if (boldMatch) {
-        return (
-          <p key={i} className="mb-2">
-            <strong className="text-stone-900">{boldMatch[1]}</strong>
-            {boldMatch[2]}
-          </p>
-        );
+        return <p key={i} className="mb-2"><strong className="text-stone-900">{boldMatch[1]}</strong>{boldMatch[2]}</p>;
       }
       return <p key={i} className="mb-2">{line}</p>;
     });
@@ -149,7 +123,6 @@ export function JournalDetail() {
     );
   }
   const IconComponent = (LucideIcons as any)[template.icon] || Book;
-  const allTags = Array.from(new Set(entries.flatMap(e => e.tags || [])));
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto px-6 py-12 print:p-0">
@@ -190,24 +163,24 @@ export function JournalDetail() {
                     <Label className="text-stone-600 font-medium">{field.label}</Label>
                     {field.type === 'textarea' ? (
                       <div className="relative">
-                        <Textarea placeholder={field.placeholder} className="rounded-xl border-stone-100 min-h-[120px] focus:ring-stone-200 bg-stone-50/30" value={formData[field.id] || ''} onChange={(e) => updateField(field.id, e.target.value)} />
+                        <Textarea placeholder={field.placeholder} className="rounded-xl border-stone-100 min-h-[120px] focus:ring-stone-200 bg-stone-50/30" value={formData[field.id] || ''} onChange={(e) => setFormData(p => ({ ...p, [field.id]: e.target.value }))} />
                         <button onClick={toggleRecording} className={cn("absolute bottom-3 right-3 p-2 rounded-full transition-all", isRecording ? "bg-red-500 text-white animate-recording" : "bg-stone-100 text-stone-400 hover:text-stone-600")}><Mic size={16} /></button>
                       </div>
                     ) : field.type === 'number' ? (
-                      <Input type="number" placeholder={field.placeholder} className="rounded-xl border-stone-100" value={formData[field.id] || ''} onChange={(e) => updateField(field.id, e.target.value, 'number')} />
+                      <Input type="number" className="rounded-xl border-stone-100" value={formData[field.id] || ''} onChange={(e) => setFormData(p => ({ ...p, [field.id]: e.target.value }))} />
                     ) : field.type === 'select' ? (
-                      <Select onValueChange={(val) => updateField(field.id, val)} value={formData[field.id]}>
+                      <Select onValueChange={(val) => setFormData(p => ({ ...p, [field.id]: val }))} value={formData[field.id]}>
                         <SelectTrigger className="rounded-xl border-stone-100"><SelectValue placeholder="Select an option" /></SelectTrigger>
                         <SelectContent>{field.options?.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}</SelectContent>
                       </Select>
                     ) : field.type === 'rating' ? (
                       <div className="flex gap-2">
                         {[1, 2, 3, 4, 5].map((num) => (
-                          <button key={num} onClick={() => updateField(field.id, num)} className={cn("p-3 rounded-xl border transition-all hover:scale-105", (formData[field.id] || 0) >= num ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-stone-50 border-stone-100 text-stone-300")}><Star size={18} fill={(formData[field.id] || 0) >= num ? "currentColor" : "none"} /></button>
+                          <button key={num} onClick={() => setFormData(p => ({ ...p, [field.id]: num }))} className={cn("p-3 rounded-xl border transition-all hover:scale-105", (formData[field.id] || 0) >= num ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-stone-50 border-stone-100 text-stone-300")}><Star size={18} fill={(formData[field.id] || 0) >= num ? "currentColor" : "none"} /></button>
                         ))}
                       </div>
                     ) : (
-                      <Input placeholder={field.placeholder} className="rounded-xl border-stone-100" value={formData[field.id] || ''} onChange={(e) => updateField(field.id, e.target.value)} />
+                      <Input className="rounded-xl border-stone-100" value={formData[field.id] || ''} onChange={(e) => setFormData(p => ({ ...p, [field.id]: e.target.value }))} />
                     )}
                   </div>
                 ))}
@@ -242,17 +215,16 @@ export function JournalDetail() {
           <section className="space-y-8 pb-20">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
               <h2 className="text-xl font-medium text-stone-900 flex items-center gap-2">
-                Discovery <span className="text-sm font-normal text-stone-400">({filteredEntries.length})</span>
+                Discovery <span className="text-sm font-normal text-stone-400">({filteredEntries.length} of {entries.length})</span>
               </h2>
             </div>
-            
-            <AdvancedSearch 
-              items={entries} 
-              onResults={setFilteredEntries} 
+            <AdvancedSearch
+              items={entries}
+              onResults={onSearchResults}
               searchFields={['title', 'content']}
               placeholder="Search in this sanctuary..."
+              context="journal"
             />
-
             <div className="space-y-8">
               <AnimatePresence mode="popLayout">
                 {filteredEntries.length === 0 ? (
