@@ -1,5 +1,5 @@
 import { IndexedEntity, Env } from "./core-utils";
-import type { User, Journal, Entry, LegacyContact } from "@shared/types";
+import type { User, Journal, Entry, LegacyContact, LegacyShare } from "@shared/types";
 export interface UserAuthData {
   id: string; // email
   passwordHash: string;
@@ -17,7 +17,7 @@ export class UserAuthEntity extends IndexedEntity<UserAuthData> {
       id: "",
       name: "",
       email: "",
-      preferences: { theme: 'system', notificationsEnabled: true },
+      preferences: { theme: 'system', notificationsEnabled: true, language: 'en' },
       createdAt: ""
     }
   };
@@ -85,4 +85,16 @@ export class LegacyContactEntity extends IndexedEntity<LegacyContact> {
     const { items } = await this.list(env, null, 1000);
     return items.filter(c => c.userId === userId);
   }
+}
+export class LegacyShareEntity extends IndexedEntity<LegacyShare> {
+  static readonly entityName = "legacy-share";
+  static readonly indexName = "legacy-shares";
+  static readonly initialState: LegacyShare = {
+    id: "",
+    journalId: "",
+    userId: "",
+    recipientEmail: "",
+    accessKey: "",
+    createdAt: ""
+  };
 }

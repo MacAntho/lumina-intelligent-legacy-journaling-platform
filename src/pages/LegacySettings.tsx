@@ -8,15 +8,16 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Heart, UserPlus, Trash2, Mail, ShieldCheck, Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '@/lib/api-client';
+import type { LegacyShare } from '@shared/types';
 export function LegacySettings() {
   const journals = useAppStore(s => s.journals);
-  const [shareLinks, setShareLinks] = useState<Record<string, string>>({});
-  const [generatingFor, setGeneratingFor] = useState<string | null>(null);
-
   const legacyContacts = useAppStore((s) => s.legacyContacts);
   const addLegacyContact = useAppStore((s) => s.addLegacyContact);
   const removeLegacyContact = useAppStore((s) => s.removeLegacyContact);
   const isSaving = useAppStore((s) => s.isSaving);
+  const [shareLinks, setShareLinks] = useState<Record<string, string>>({});
+  const [generatingFor, setGeneratingFor] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const handleAddContact = async () => {
@@ -26,27 +27,25 @@ export function LegacySettings() {
     setNewEmail('');
     toast.success('Recipient added and verification email sent.');
   };
-
   const handleGenerateLink = async (journalId: string) => {
     setGeneratingFor(journalId);
     try {
-      const res = await fetch('/api/legacy/generate-link', {
+      const data = await api<LegacyShare>('/api/legacy/generate-link', {
         method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${localStorage.getItem('lumina_token')}`,
-          'Content-Type': 'application/json' 
-        },
-        body: JSON.stringify({ journalId, recipientEmail: legacyContacts[0]?.email || 'legacy@lumina.io' })
+        body: JSON.stringify({ 
+          journalId, 
+          recipientEmail: legacyContacts[0]?.email || 'legacy@lumina.io' 
+        })
       });
-      const data = await res.json();
-      const link = `${window.location.origin}/shared/${data.data.id}?key=${data.data.accessKey}`;
+      const link = `${window.location.origin}/shared/${data.id}?key=${data.accessKey}`;
       setShareLinks(prev => ({ ...prev, [journalId]: link }));
       toast.success('Legacy link generated');
+    } catch (error) {
+      toast.error('Failed to generate sharing link');
     } finally {
       setGeneratingFor(null);
     }
   };
-
   return (
     <AppLayout container>
       <div className="max-w-4xl mx-auto space-y-12">
@@ -138,7 +137,6 @@ export function LegacySettings() {
                 </div>
               </CardContent>
             </Card>
-            
             <Card className="rounded-3xl border-stone-100 dark:border-stone-800 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-xl font-serif flex items-center gap-2">
@@ -151,9 +149,9 @@ export function LegacySettings() {
                   <div key={j.id} className="p-4 rounded-2xl bg-stone-50 border border-stone-100 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-sm">{j.title}</span>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         disabled={generatingFor === j.id}
                         onClick={() => handleGenerateLink(j.id)}
                         className="rounded-full text-xs"
@@ -163,9 +161,9 @@ export function LegacySettings() {
                     </div>
                     {shareLinks[j.id] && (
                       <div className="flex gap-2">
-                        <input 
-                          readOnly 
-                          value={shareLinks[j.id]} 
+                        <input
+                          readOnly
+                          value={shareLinks[j.id]}
                           className="text-[10px] bg-white border rounded px-2 py-1 flex-1 truncate"
                         />
                         <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]" onClick={() => {

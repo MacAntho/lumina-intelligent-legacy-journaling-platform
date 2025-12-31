@@ -22,7 +22,9 @@ export function LegacyView() {
         setLoading(false);
       }
     };
-    fetchShared();
+    if (shareId && key) {
+      fetchShared();
+    }
   }, [shareId, key]);
   if (loading) {
     return (
@@ -36,13 +38,13 @@ export function LegacyView() {
     return (
       <div className="min-h-screen bg-[#FDFCFB] flex flex-col items-center justify-center p-4 text-center">
         <h1 className="text-2xl font-serif text-stone-900 mb-2">Access Denied</h1>
-        <p className="text-stone-500">This legacy link is invalid or has expired.</p>
+        <p className="text-stone-500">This legacy link is invalid, has expired, or requires a valid key.</p>
       </div>
     );
   }
   return (
     <div className="min-h-screen bg-[#FDFCFB] selection:bg-stone-200">
-      <nav className="border-b border-stone-100 bg-white/80 backdrop-blur-md sticky top-0 z-10">
+      <nav className="border-b border-stone-100 bg-white/80 backdrop-blur-md sticky top-0 z-10 print:hidden">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="text-stone-900" size={18} />
@@ -53,32 +55,37 @@ export function LegacyView() {
           </Button>
         </div>
       </nav>
-      <main className="max-w-3xl mx-auto px-6 py-20">
+      <main className="max-w-3xl mx-auto px-6 py-20 print:py-0">
         <header className="mb-20 text-center">
           <p className="text-xs font-bold uppercase tracking-[0.3em] text-stone-400 mb-4">A Shared Journal From</p>
           <h1 className="text-5xl font-serif font-medium text-stone-900 mb-4">{data.authorName}</h1>
           <h2 className="text-2xl font-serif italic text-stone-500">{data.journalTitle}</h2>
           <div className="h-px w-24 bg-stone-200 mx-auto mt-12" />
         </header>
-        <div className="space-y-24">
-          {data.entries.length === 0 ? (
+        <div className="space-y-24 print:space-y-12">
+          {(!data.entries || data.entries.length === 0) ? (
             <p className="text-center italic text-stone-400 py-20">No entries have been shared in this archive.</p>
           ) : (
             data.entries.map((entry) => (
-              <article key={entry.id} className="prose-lumina">
+              <article key={entry.id} className="prose-lumina break-inside-avoid">
                 <div className="flex items-center gap-3 text-stone-400 text-xs font-medium uppercase tracking-widest mb-6">
                   <Calendar size={14} />
                   {format(new Date(entry.date), 'MMMM do, yyyy')}
                 </div>
-                <h3 className="text-3xl font-serif font-medium text-stone-900 mb-6">{entry.title}</h3>
+                <h3 className="text-3xl font-serif font-medium text-stone-900 mb-6">{entry.title || 'Untitled Entry'}</h3>
                 <div className="text-lg leading-relaxed text-stone-700 font-serif whitespace-pre-wrap">
                   {entry.content}
                 </div>
+                {entry.tags && entry.tags.length > 0 && (
+                  <div className="mt-8 flex gap-3 opacity-40">
+                    {entry.tags.map(tag => <span key={tag} className="text-[10px] uppercase font-bold">#{tag}</span>)}
+                  </div>
+                )}
               </article>
             ))
           )}
         </div>
-        <footer className="mt-40 pt-12 border-t border-stone-100 text-center">
+        <footer className="mt-40 pt-12 border-t border-stone-100 text-center print:mt-20">
           <div className="inline-flex h-10 w-10 rounded-xl bg-stone-900 items-center justify-center text-white mb-4">
             <Sparkles size={20} />
           </div>

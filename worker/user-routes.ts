@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { jwt, sign } from "hono/jwt";
 import { format } from "date-fns";
 import type { Env } from './core-utils';
-import { UserAuthEntity, JournalEntity, EntryEntity, LegacyContactEntity } from "./entities";
+import { UserAuthEntity, JournalEntity, EntryEntity, LegacyContactEntity, LegacyShareEntity } from "./entities";
 import { ok, bad, notFound } from './core-utils';
 import type { LoginRequest, RegisterRequest } from "@shared/types";
 const JWT_SECRET = "lumina-secret-key-change-this";
@@ -30,7 +30,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         id: userId,
         name: body.name,
         email: body.email.toLowerCase(),
-        preferences: { theme: 'system', notificationsEnabled: true },
+        preferences: { theme: 'system', notificationsEnabled: true, language: 'en' },
         createdAt: new Date().toISOString()
       }
     });
@@ -96,26 +96,21 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const payload = c.get('jwtPayload');
     const entries = await EntryEntity.listByUser(c.env, payload.userId);
     const sortedEntries = [...entries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
     const frequency: Record<string, number> = { Sun:0, Mon:0, Tue:0, Wed:0, Thu:0, Fri:0, Sat:0 };
     sortedEntries.forEach(e => {
       const day = format(new Date(e.date), 'eee');
       if (frequency[day] !== undefined) frequency[day]++;
     });
-
     const moodTrends = sortedEntries.slice(-14).map(e => ({
       date: format(new Date(e.date), 'MM-dd'),
       score: Number(e.structuredData?.mood_score || e.structuredData?.intensity || 3)
     }));
-
-    // Extract topics from tags
     const tagMap: Record<string, number> = {};
     entries.slice(-50).forEach(e => {
       e.tags?.forEach(tag => {
         tagMap[tag] = (tagMap[tag] || 0) + 1;
       });
     });
-
     const topTopics = Object.entries(tagMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
@@ -123,23 +118,19 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         text,
         value: Math.round((count / Math.max(1, entries.length)) * 100)
       }));
-
     if (topTopics.length === 0) {
       topTopics.push({ text: 'Discovery', value: 100 });
     }
-
     return ok(c, {
       moodTrends,
       writingFrequency: Object.entries(frequency).map(([day, count]) => ({ day, count })),
       topTopics
     });
   });
-  // AI ENDPOINTS
   app.get('/api/ai/daily', async (c) => {
     const payload = c.get('jwtPayload');
     const journals = await JournalEntity.listByUser(c.env, payload.userId);
     const lastJournal = journals[0];
-    // Rule-based logic for MVP (Simulating Workers AI analysis)
     let prompt = "How did you find stillness today?";
     let affirmation = "I am growing through my reflections.";
     if (lastJournal?.templateId === 'fitness') {
@@ -155,7 +146,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const payload = c.get('jwtPayload');
     const { message } = await c.req.json();
     const entries = await EntryEntity.listByUser(c.env, payload.userId);
-    // MVP: Pattern-matching and empathetic responses
     let responseContent = "I'm listening. Your journey is uniquely yours, and I'm here to help you navigate it.";
     const lowerMsg = message.toLowerCase();
     if (lowerMsg.includes('summary') || lowerMsg.includes('week')) {
@@ -174,35 +164,43 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     };
     return ok(c, assistantMsg);
   });
-
   app.put('/api/auth/settings', async (c) => {
     const payload = c.get('jwtPayload');
     const body = await c.req.json();
     const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
     if (!userAuth) return notFound(c);
-    
     const updatedProfile = { ...userAuth.profile, preferences: { ...userAuth.profile.preferences, ...body } };
     await new UserAuthEntity(c.env, payload.email).patch({ profile: updatedProfile });
     return ok(c, updatedProfile);
   });
-
   app.post('/api/legacy/generate-link', async (c) => {
     const payload = c.get('jwtPayload');
     const { journalId, recipientEmail } = await c.req.json();
     const shareId = crypto.randomUUID();
     const accessKey = Math.random().toString(36).slice(-8);
-    // In a real app, you'd create a LegacyShareEntity here. 
-    // For Phase 11 MVP, we return the generated data to simulate the persistence.
-    return ok(c, { id: shareId, journalId, accessKey, recipientEmail });
+    const share = await LegacyShareEntity.create(c.env, {
+      id: shareId,
+      journalId,
+      userId: payload.userId,
+      recipientEmail,
+      accessKey,
+      createdAt: new Date().toISOString()
+    });
+    return ok(c, share);
   });
-
   app.get('/api/public/legacy/:shareId', async (c) => {
-    // Simplified public endpoint simulation
-    // Real logic would fetch journal and entries based on the share record
+    const shareId = c.req.param('shareId');
+    const key = c.req.query('key');
+    const shareInst = new LegacyShareEntity(c.env, shareId);
+    if (!(await shareInst.exists())) return notFound(c, 'Legacy archive not found');
+    const share = await shareInst.getState();
+    if (share.accessKey !== key) return bad(c, 'Invalid access key');
+    const journal = await new JournalEntity(c.env, share.journalId).getState();
+    const entries = await EntryEntity.listByJournal(c.env, share.journalId, share.userId);
     return ok(c, {
-      journalTitle: "Shared Legacy Journal",
-      authorName: "Lumina User",
-      entries: []
+      journalTitle: journal.title,
+      authorName: "A Lumina Resident",
+      entries: entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     });
   });
 }
