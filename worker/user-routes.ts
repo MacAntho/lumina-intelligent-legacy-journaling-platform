@@ -18,12 +18,13 @@ import { generateServerPdf } from "./pdf-service";
 const JWT_SECRET = "lumina-secret-key-change-this";
 async function hashPassword(password: string, salt: string) {
   const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits", "deriveKey"]);
-  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: enc.encode(salt), iterations: 100000, hash: "SHA-256" }, keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "deriveKey"]);
-  const exported = await crypto.subtle.exportKey("raw", key);
-  return btoa(String.fromCharCode(...new Uint8Array(exported)));
+  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits"]);
+  const hashBytes = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: enc.encode(salt), iterations: 100000, hash: "SHA-256" }, keyMaterial, 256);
+  return btoa(String.fromCharCode(...new Uint8Array(hashBytes)));
 }
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
+  // Remove problematic test user seeding - will be created on first login/register
+
   // --- PUBLIC ROUTES ---
   app.get('/api/public/legacy/:shareId', async (c) => {
     const shareId = c.req.param('shareId');
@@ -33,9 +34,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const share = await inst.getState();
     if (share.accessKey !== key) return bad(c, 'Invalid access key');
     const journal = new JournalEntity(c.env, share.journalId);
+    if (!(await journal.exists())) return notFound(c, 'Journal not found');
     const journalState = await journal.getState();
     const users = await UserAuthEntity.list(c.env);
-    const author = users.items.find(u => u.profile.id === share.userId);
+    const author = users?.items?.find(u => u.profile.id === share.userId);
     const data = {
       journalTitle: journalState.title,
       authorName: author?.profile.name || 'Anonymous Author',
@@ -63,6 +65,65 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     return ok(c, { message: "Recovery dispatched if account exists.", debugToken: "LMN-DEBUG-" + Date.now().toString().slice(-6) });
   });
   app.post('/api/auth/register', async (c) => {
+    const testEmail = 'test@lumina.io'.toLowerCase();
+    if (!await UserAuthEntity.findByEmail(c.env, testEmail)) {
+      const testSalt = crypto.randomUUID();
+      const testHash = await hashPassword('lumina123', testSalt);
+      const testUserId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const currentMonth = now.slice(0,7);
+      await UserAuthEntity.create(c.env, {
+        id: testEmail,
+        passwordHash: testHash,
+        salt: testSalt,
+        profile: {
+          id: testUserId,
+          name: 'Test User',
+          email: testEmail,
+          preferences: {
+            theme: 'system',
+            notificationsEnabled: true,
+            language: 'en',
+            onboardingCompleted: false,
+            e2eEnabled: false,
+            analyticsOptIn: true,
+            privacyLevel: 'standard',
+            tier: 'free',
+            subscriptionStatus: 'active',
+            notificationSettings: {
+              entry: true,
+              prompt: true,
+              affirmation: true,
+              share: true,
+              access: true,
+              insight: true,
+              export: true,
+              reminder: true,
+              limit: true,
+              activity: true
+            },
+            quietHours: {
+              start: "22:00",
+              end: "08:00",
+              enabled: false
+            }
+          },
+          usage: {
+            journalCount: 0,
+            monthlyEntryCount: 0,
+            lastResetMonth: currentMonth
+          },
+          createdAt: now,
+          lastHeartbeatAt: now
+        }
+      });
+      await UsageEntity.create(c.env, {
+        id: testUserId,
+        journalCount: 0,
+        monthlyEntryCount: 0,
+        lastResetMonth: currentMonth
+      });
+    }
     const body = await c.req.json<RegisterRequest>();
     if (!body.email || !body.password || !body.name) return bad(c, 'Missing fields');
     const existing = await UserAuthEntity.findByEmail(c.env, body.email);
@@ -88,6 +149,65 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     return ok(c, { user: userAuth.profile, token });
   });
   app.post('/api/auth/login', async (c) => {
+    const testEmail = 'test@lumina.io'.toLowerCase();
+    if (!await UserAuthEntity.findByEmail(c.env, testEmail)) {
+      const testSalt = crypto.randomUUID();
+      const testHash = await hashPassword('lumina123', testSalt);
+      const testUserId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const currentMonth = now.slice(0,7);
+      await UserAuthEntity.create(c.env, {
+        id: testEmail,
+        passwordHash: testHash,
+        salt: testSalt,
+        profile: {
+          id: testUserId,
+          name: 'Test User',
+          email: testEmail,
+          preferences: {
+            theme: 'system',
+            notificationsEnabled: true,
+            language: 'en',
+            onboardingCompleted: false,
+            e2eEnabled: false,
+            analyticsOptIn: true,
+            privacyLevel: 'standard',
+            tier: 'free',
+            subscriptionStatus: 'active',
+            notificationSettings: {
+              entry: true,
+              prompt: true,
+              affirmation: true,
+              share: true,
+              access: true,
+              insight: true,
+              export: true,
+              reminder: true,
+              limit: true,
+              activity: true
+            },
+            quietHours: {
+              start: "22:00",
+              end: "08:00",
+              enabled: false
+            }
+          },
+          usage: {
+            journalCount: 0,
+            monthlyEntryCount: 0,
+            lastResetMonth: currentMonth
+          },
+          createdAt: now,
+          lastHeartbeatAt: now
+        }
+      });
+      await UsageEntity.create(c.env, {
+        id: testUserId,
+        journalCount: 0,
+        monthlyEntryCount: 0,
+        lastResetMonth: currentMonth
+      });
+    }
     const body = await c.req.json<LoginRequest>();
     const userAuth = await UserAuthEntity.findByEmail(c.env, body.email);
     if (!userAuth) return bad(c, 'Invalid credentials');
@@ -99,8 +219,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const token = await sign({ userId: userAuth.profile.id, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
     return ok(c, { user: updatedProfile, token });
   });
+
   // --- AUTH PROTECTED ROUTES ---
   app.use('/api/*', jwt({ secret: JWT_SECRET }));
+  
   app.get('/api/auth/me', async (c) => {
     const payload = c.get('jwtPayload');
     const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
@@ -205,9 +327,12 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const range = (c.req.query('range') || 'week') as AnalysisRange;
     if (!journalId) return bad(c, 'journalId required');
     const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
-    const journal = await new JournalEntity(c.env, journalId).getState();
+    if (!userAuth) return notFound(c);
+    const journalInst = new JournalEntity(c.env, journalId);
+    if (!(await journalInst.exists())) return bad(c, 'Journal not found');
+    const journal = await journalInst.getState();
     const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
-    const analysis = await analyzeJournalPatterns(userAuth!.profile.name, journal.title, entries, range);
+    const analysis = await analyzeJournalPatterns(userAuth.profile.name, journal.title, entries, range);
     const insight = await AiInsightEntity.create(c.env, {
       ...analysis,
       id: crypto.randomUUID(),
@@ -222,8 +347,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const payload = c.get('jwtPayload');
     const { message, history } = await c.req.json();
     const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
+    if (!userAuth) return notFound(c);
     const entries = await EntryEntity.listByUser(c.env, payload.userId);
-    const response = await chatWithAssistant(userAuth!.profile.name, message, history, entries);
+    const response = await chatWithAssistant(userAuth.profile.name, message, history, entries);
     return c.text(response);
   });
   app.get('/api/activity/stream', async (c) => {
@@ -268,7 +394,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       highContrast: c.req.query('contrast') === 'true',
       customMessage: c.req.query('message') || ""
     };
-    const journal = await new JournalEntity(c.env, journalId).getState();
+    const journalInst = new JournalEntity(c.env, journalId);
+    if (!(await journalInst.exists())) return bad(c, 'Journal not found');
+    const journal = await journalInst.getState();
     const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
     const pdfBytes = await generateServerPdf(journal, entries, options);
     await ExportLogEntity.create(c.env, {
