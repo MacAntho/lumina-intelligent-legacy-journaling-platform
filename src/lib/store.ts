@@ -24,6 +24,7 @@ interface AppState {
   unreadCount: number;
   recentSearches: string[];
   savedSearches: SavedSearch[];
+  searchSuggestions: { titles: string[], tags: string[] };
   isLoading: boolean;
   isSaving: boolean;
   isInitialized: boolean;
@@ -32,7 +33,10 @@ interface AppState {
   initialize: () => Promise<void>;
   login: (req: LoginRequest) => Promise<void>;
   register: (req: RegisterRequest) => Promise<void>;
+  forgotPassword: (email: string) => Promise<{ message: string; debugToken?: string }>;
+  resetPassword: (token: string, password: string) => Promise<void>;
   logout: () => void;
+  deleteAccount: () => Promise<void>;
   heartbeat: () => Promise<void>;
   updateProfile: (profile: Partial<User>) => Promise<void>;
   fetchEntries: (journalId: string, params?: string) => Promise<void>;
@@ -42,6 +46,7 @@ interface AppState {
   setDraft: (journalId: string, draft: Partial<Entry>) => void;
   clearDraft: (journalId: string) => void;
   fetchInsights: () => Promise<void>;
+  fetchSearchSuggestions: () => Promise<void>;
   addLegacyContact: (contact: Partial<LegacyContact>) => Promise<void>;
   removeLegacyContact: (id: string) => Promise<void>;
   fetchLegacyAuditLogs: () => Promise<void>;
@@ -81,6 +86,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   unreadCount: 0,
   recentSearches: JSON.parse(localStorage.getItem('lumina_recent_searches') || '[]'),
   savedSearches: [],
+  searchSuggestions: { titles: [], tags: [] },
   isLoading: false,
   isSaving: false,
   isInitialized: false,
@@ -108,10 +114,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().fetchLegacyAuditLogs();
       get().fetchNotifications();
       get().fetchSavedSearches();
+      get().fetchSearchSuggestions();
       if (heartbeatInterval) clearInterval(heartbeatInterval);
       heartbeatInterval = setInterval(() => get().heartbeat(), 300000);
     } catch (error) {
-      console.error('Initialization failed:', error);
       get().logout();
       set({ isLoading: false, isInitialized: false });
     }
@@ -122,7 +128,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const user = await api<User>('/api/auth/heartbeat', { method: 'PUT' });
       set({ user });
       get().fetchNotifications();
-    } catch (e) { console.error('Heartbeat skipped'); }
+    } catch (e) { /* silent heartbeat fail */ }
   },
   login: async (req) => {
     set({ isLoading: true });
@@ -174,6 +180,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       throw error;
     }
   },
+  forgotPassword: async (email) => {
+    return await api<{ message: string, debugToken?: string }>('/api/auth/forgot', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    });
+  },
+  resetPassword: async (token, password) => {
+    await api('/api/auth/reset', {
+      method: 'POST',
+      body: JSON.stringify({ token, password })
+    });
+    toast.success('Security restored. You may now login.');
+  },
   logout: () => {
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
@@ -184,25 +203,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     localStorage.removeItem('lumina_drafts');
     localStorage.removeItem('lumina_recent_searches');
     set({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      journals: [],
-      entries: [],
-      legacyContacts: [],
-      legacyAuditLogs: [],
-      insightData: null,
-      aiChatHistory: [],
-      dailyContent: null,
-      notifications: [],
-      unreadCount: 0,
-      recentSearches: [],
-      savedSearches: [],
-      isInitialized: false,
-      isLoading: false,
-      isTourActive: false,
-      tourStep: 0
+      user: null, token: null, isAuthenticated: false, journals: [], entries: [],
+      legacyContacts: [], legacyAuditLogs: [], insightData: null, aiChatHistory: [],
+      dailyContent: null, notifications: [], unreadCount: 0, recentSearches: [],
+      savedSearches: [], isInitialized: false, isLoading: false, isTourActive: false, tourStep: 0
     });
+  },
+  deleteAccount: async () => {
+    set({ isSaving: true });
+    try {
+      await api('/api/auth/me', { method: 'DELETE' });
+      get().logout();
+      toast.success('Account purged. Your data is gone.');
+    } catch (e) {
+      set({ isSaving: false });
+      toast.error('Purge sequence failed');
+    }
   },
   updateProfile: async (profile) => {
     set({ isSaving: true });
@@ -212,10 +228,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         body: JSON.stringify(profile)
       });
       set({ user: updated, isSaving: false });
-      toast.success('Profile preferences updated');
+      toast.success('Preferences synchronized');
     } catch (error) {
       set({ isSaving: false });
-      toast.error('Update failed');
+      toast.error('Synchronization failed');
     }
   },
   fetchEntries: async (journalId, params = '') => {
@@ -223,9 +239,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const url = `/api/journals/${journalId}/entries${params ? `?${params}` : ''}`;
       const entries = await api<Entry[]>(url);
       set({ entries });
-    } catch (error) {
-      console.error('Fetch entries failed:', error);
-    }
+    } catch (error) { console.error(error); }
   },
   addJournal: async (journalData) => {
     set({ isSaving: true });
@@ -236,9 +250,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       set(state => ({ journals: [...state.journals, journal], isSaving: false }));
       toast.success('New sanctuary initialized');
-    } catch (error) {
-      set({ isSaving: false });
-    }
+    } catch (error) { set({ isSaving: false }); }
   },
   deleteJournal: async (id) => {
     try {
@@ -247,9 +259,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         journals: state.journals.filter(j => j.id !== id),
         entries: state.entries.filter(e => e.journalId !== id)
       }));
-    } catch (error) {
-      console.error('Delete journal failed:', error);
-    }
+    } catch (error) { console.error(error); }
   },
   addEntry: async (entryData) => {
     set({ isSaving: true });
@@ -264,19 +274,15 @@ export const useAppStore = create<AppState>((set, get) => ({
         isSaving: false
       }));
       get().clearDraft(entry.journalId);
-    } catch (error) {
-      set({ isSaving: false });
-    }
+    } catch (error) { set({ isSaving: false }); }
   },
   setDraft: (journalId, draft) => {
-    const drafts = get().drafts;
-    const nextDrafts = { ...drafts, [journalId]: draft };
+    const nextDrafts = { ...get().drafts, [journalId]: draft };
     set({ drafts: nextDrafts });
     localStorage.setItem('lumina_drafts', JSON.stringify(nextDrafts));
   },
   clearDraft: (journalId) => {
-    const drafts = get().drafts;
-    const { [journalId]: _, ...rest } = drafts;
+    const { [journalId]: _, ...rest } = get().drafts;
     set({ drafts: rest });
     localStorage.setItem('lumina_drafts', JSON.stringify(rest));
   },
@@ -284,77 +290,64 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const insightData = await api<InsightData>('/api/insights');
       set({ insightData });
-    } catch (error) {
-      console.error('Fetch insights failed:', error);
-    }
+    } catch (error) { console.error(error); }
+  },
+  fetchSearchSuggestions: async () => {
+    try {
+      const searchSuggestions = await api<{ titles: string[], tags: string[] }>('/api/search/suggestions');
+      set({ searchSuggestions });
+    } catch (e) { console.error(e); }
   },
   addLegacyContact: async (contactData) => {
     set({ isSaving: true });
     try {
       const contact = await api<LegacyContact>('/api/legacy-contacts', {
-        method: 'POST',
-        body: JSON.stringify(contactData)
+        method: 'POST', body: JSON.stringify(contactData)
       });
       set(state => ({ legacyContacts: [...state.legacyContacts, contact], isSaving: false }));
-    } catch (error) {
-      set({ isSaving: false });
-    }
+    } catch (error) { set({ isSaving: false }); }
   },
   removeLegacyContact: async (id) => {
     try {
       await api(`/api/legacy-contacts/${id}`, { method: 'DELETE' });
       set(state => ({ legacyContacts: state.legacyContacts.filter(c => c.id !== id) }));
-    } catch (error) {
-      console.error('Remove contact failed:', error);
-    }
+    } catch (error) { console.error(error); }
   },
   fetchLegacyAuditLogs: async () => {
     try {
       const logs = await api<LegacyAuditLog[]>('/api/legacy/audit');
       set({ legacyAuditLogs: logs });
-    } catch (e) { console.error('Fetch audit logs failed', e); }
+    } catch (e) { console.error(e); }
   },
   fetchDailyContent: async () => {
     try {
       const dailyContent = await api<DailyContent>('/api/ai/daily');
       set({ dailyContent });
-    } catch (error) {
-      console.error('Fetch daily content failed:', error);
-    }
+    } catch (error) { console.error(error); }
   },
   logExport: async (logData) => {
     try {
       const log = await api<ExportLog>('/api/exports', { method: 'POST', body: JSON.stringify(logData) });
       set(state => ({ exportHistory: [log, ...state.exportHistory] }));
-    } catch (e) { console.error('Log export failed', e); }
+    } catch (e) { console.error(e); }
   },
   fetchExportHistory: async () => {
     try {
       const logs = await api<ExportLog[]>('/api/exports');
       set({ exportHistory: logs });
-    } catch (e) { console.error('Fetch export history failed', e); }
+    } catch (e) { console.error(e); }
   },
   sendAiMessage: async (content) => {
-    const userMsg: AiMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content,
-      timestamp: new Date().toISOString()
-    };
-    set(state => {
-      const newHistory = [...state.aiChatHistory, userMsg];
-      localStorage.setItem('lumina_chat', JSON.stringify(newHistory));
-      return { aiChatHistory: newHistory, isSaving: true };
-    });
+    const userMsg: AiMessage = { id: crypto.randomUUID(), role: 'user', content, timestamp: new Date().toISOString() };
+    set(state => ({ aiChatHistory: [...state.aiChatHistory, userMsg], isSaving: true }));
     try {
       const response = await api<AiMessage>('/api/ai/chat', {
-        method: 'POST',
-        body: JSON.stringify({ message: content, history: get().aiChatHistory })
+        method: 'POST', body: JSON.stringify({ message: content, history: get().aiChatHistory })
       });
       set(state => {
-        const newHistory = [...state.aiChatHistory, response];
-        localStorage.setItem('lumina_chat', JSON.stringify(newHistory));
-        return { aiChatHistory: newHistory, isSaving: false };
+        const nextHistory = [...state.aiChatHistory, response];
+        localStorage.setItem('lumina_chat', JSON.stringify(nextHistory));
+        return { aiChatHistory: nextHistory, isSaving: false };
       });
     } catch (error) {
       set({ isSaving: false });
@@ -368,11 +361,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchNotifications: async () => {
     try {
       const notifications = await api<AppNotification[]>('/api/notifications');
-      set({
-        notifications,
-        unreadCount: notifications.filter(n => !n.isRead).length
-      });
-    } catch (e) { console.error('Fetch notifications failed', e); }
+      set({ notifications, unreadCount: notifications.filter(n => !n.isRead).length });
+    } catch (e) { console.error(e); }
   },
   markNotificationRead: async (id) => {
     const prev = get().notifications;
@@ -382,21 +372,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
     try {
       await api(`/api/notifications/${id}/read`, { method: 'PATCH' });
-    } catch (e) {
-      set({ notifications: prev, unreadCount: prev.filter(n => !n.isRead).length });
-    }
+    } catch (e) { set({ notifications: prev, unreadCount: prev.filter(n => !n.isRead).length }); }
   },
   markAllNotificationsRead: async () => {
     const prev = get().notifications;
-    set({
-      notifications: prev.map(n => ({ ...n, isRead: true })),
-      unreadCount: 0
-    });
+    set({ notifications: prev.map(n => ({ ...n, isRead: true })), unreadCount: 0 });
     try {
       await api('/api/notifications/read-all', { method: 'POST' });
-    } catch (e) {
-      set({ notifications: prev, unreadCount: prev.filter(n => !n.isRead).length });
-    }
+    } catch (e) { set({ notifications: prev, unreadCount: prev.filter(n => !n.isRead).length }); }
   },
   deleteNotification: async (id) => {
     const prev = get().notifications;
@@ -407,14 +390,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
     try {
       await api(`/api/notifications/${id}`, { method: 'DELETE' });
-    } catch (e) {
-      set({ notifications: prev, unreadCount: prev.filter(n => !n.isRead).length });
-    }
+    } catch (e) { set({ notifications: prev, unreadCount: prev.filter(n => !n.isRead).length }); }
   },
   addRecentSearch: (query) => {
     if (!query.trim()) return;
-    const current = get().recentSearches;
-    const next = [query, ...current.filter(q => q !== query)].slice(0, 5);
+    const next = [query, ...get().recentSearches.filter(q => q !== query)].slice(0, 5);
     set({ recentSearches: next });
     localStorage.setItem('lumina_recent_searches', JSON.stringify(next));
   },
@@ -426,27 +406,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const savedSearches = await api<SavedSearch[]>('/api/searches');
       set({ savedSearches });
-    } catch (e) { console.error('Fetch saved searches failed', e); }
+    } catch (e) { console.error(e); }
   },
   saveSearch: async (searchData) => {
     set({ isSaving: true });
     try {
       const saved = await api<SavedSearch>('/api/searches', {
-        method: 'POST',
-        body: JSON.stringify(searchData)
+        method: 'POST', body: JSON.stringify(searchData)
       });
       set(state => ({ savedSearches: [saved, ...state.savedSearches], isSaving: false }));
       toast.success('Search pattern archived');
-    } catch (e) {
-      set({ isSaving: false });
-    }
+    } catch (e) { set({ isSaving: false }); }
   },
   deleteSavedSearch: async (id) => {
     try {
       await api(`/api/searches/${id}`, { method: 'DELETE' });
       set(state => ({ savedSearches: state.savedSearches.filter(s => s.id !== id) }));
       toast.success('Search pattern removed');
-    } catch (e) { console.error('Delete saved search failed', e); }
+    } catch (e) { console.error(e); }
   },
   startTour: () => set({ isTourActive: true, tourStep: 0 }),
   nextTourStep: () => set(state => ({ tourStep: state.tourStep + 1 })),

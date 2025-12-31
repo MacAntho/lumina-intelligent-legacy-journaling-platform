@@ -6,20 +6,33 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Settings, Moon, Globe, Bell, Shield, Download, Trash2, Loader2, Sparkles, Share2, FileDown, RefreshCw, GraduationCap } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Settings, Moon, Globe, Bell, Shield, Download, Trash2, Loader2, Sparkles, Share2, FileDown, RefreshCw, GraduationCap, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 export function SettingsPage() {
   const user = useAppStore(s => s.user);
   const isSaving = useAppStore(s => s.isSaving);
+  const journals = useAppStore(s => s.journals);
+  const entries = useAppStore(s => s.entries);
   const updateProfile = useAppStore(s => s.updateProfile);
   const restartTour = useAppStore(s => s.restartTour);
+  const deleteAccount = useAppStore(s => s.deleteAccount);
   const navigate = useNavigate();
   const handlePreferenceChange = async (key: string, value: any) => {
     if (!user) return;
     const newPrefs = { ...user.preferences, [key]: value };
-    await updateProfile({ preferences: newPrefs });
-    toast.success('Preferences updated');
+    await updateProfile(newPrefs);
   };
   const handleNotificationTypeToggle = async (type: string, value: boolean) => {
     if (!user) return;
@@ -31,28 +44,41 @@ export function SettingsPage() {
     navigate('/dashboard');
     toast.success('Onboarding tour restarted.');
   };
-  const handleRecoverManifest = () => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then((registrations) => {
-        for (let registration of registrations) {
-          registration.unregister();
-        }
-        window.location.reload();
-      });
-      toast.success('PWA Manifest reset initiated.');
-    }
+  const handleExportFullSanctuary = () => {
+    const data = {
+      profile: user,
+      journals,
+      entries,
+      exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `lumina-sanctuary-export-${dateFnsFormat(new Date(), 'yyyy-MM-dd')}.json`;
+    link.click();
+    toast.success('Sanctuary archive successfully compiled.');
   };
   const hours = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`);
   return (
     <AppLayout container>
       <div className="max-w-4xl mx-auto space-y-12 pb-20">
-        <header>
-          <div className="flex items-center gap-2 text-stone-500 mb-2">
-            <Settings size={20} />
-            <span className="text-xs font-bold uppercase tracking-[0.2em]">Application Control</span>
+        <header className="flex justify-between items-end">
+          <div>
+            <div className="flex items-center gap-2 text-stone-500 mb-2">
+              <Settings size={20} />
+              <span className="text-xs font-bold uppercase tracking-[0.2em]">Application Control</span>
+            </div>
+            <h1 className="text-4xl font-serif font-medium text-stone-900">Settings</h1>
+            <p className="text-stone-500 mt-2 font-light">Customize your sanctuary's environment and security.</p>
           </div>
-          <h1 className="text-4xl font-serif font-medium text-stone-900">Settings</h1>
-          <p className="text-stone-500 mt-2 font-light">Customize your sanctuary's environment and security.</p>
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-stone-300">
+            {isSaving ? (
+              <span className="flex items-center gap-2"><Loader2 size={12} className="animate-spin" /> Syncing...</span>
+            ) : (
+              <span className="flex items-center gap-2 text-emerald-500">All Changes Safe</span>
+            )}
+          </div>
         </header>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-8">
@@ -78,33 +104,13 @@ export function SettingsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="lang-select">Language</Label>
-                  <Select
-                    defaultValue={user?.preferences?.language || 'en'}
-                    onValueChange={(val) => handlePreferenceChange('language', val)}
-                  >
-                    <SelectTrigger id="lang-select" className="w-32 rounded-xl">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="es">Español</SelectItem>
-                      <SelectItem value="fr">Français</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </CardContent>
             </Card>
             <Card className="rounded-3xl border-stone-200 shadow-sm bg-white/50 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg"><GraduationCap size={18} /> Learning Center</CardTitle>
-                <CardDescription>Resources to master the Lumina experience.</CardDescription>
+                <CardTitle className="flex items-center gap-2 text-lg"><GraduationCap size={18} /> Onboarding</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-xs text-stone-500 font-light leading-relaxed">
-                  The guided tour walks you through creating your first journal, using AI insights, and securing your digital legacy.
-                </p>
+              <CardContent>
                 <Button variant="outline" onClick={handleRestartTour} className="w-full justify-start gap-2 rounded-xl">
                   <RefreshCw size={16} /> Restart Guided Tour
                 </Button>
@@ -114,95 +120,57 @@ export function SettingsPage() {
           <div className="space-y-8">
             <Card className="rounded-3xl border-stone-200 shadow-sm bg-white/50 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg"><Bell size={18} /> Notification Controls</CardTitle>
-                <CardDescription>Configure how and when you want to be notified.</CardDescription>
+                <CardTitle className="flex items-center gap-2 text-lg"><Bell size={18} /> Notifications</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label className="font-medium">Master Alerts</Label>
-                    <p className="text-xs text-stone-500">Enable all in-app notifications.</p>
-                  </div>
+                  <Label>Global Alerts</Label>
                   <Switch
                     checked={user?.preferences?.notificationsEnabled}
                     onCheckedChange={(val) => handlePreferenceChange('notificationsEnabled', val)}
                   />
                 </div>
-                <div className="pt-6 border-t border-stone-100 space-y-5">
-                  <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Granular Toggles</Label>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs">
-                        <Share2 size={14} className="text-stone-400" />
-                        <span>Legacy Share Creation</span>
-                      </div>
-                      <Switch
-                        checked={user?.preferences?.notificationSettings?.share}
-                        onCheckedChange={(v) => handleNotificationTypeToggle('share', v)}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs">
-                        <Shield size={14} className="text-stone-400" />
-                        <span>Legacy Access Alerts</span>
-                      </div>
-                      <Switch
-                        checked={user?.preferences?.notificationSettings?.access}
-                        onCheckedChange={(v) => handleNotificationTypeToggle('access', v)}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs">
-                        <Sparkles size={14} className="text-stone-400" />
-                        <span>AI Insights & Prompts</span>
-                      </div>
-                      <Switch
-                        checked={user?.preferences?.notificationSettings?.insight}
-                        onCheckedChange={(v) => handleNotificationTypeToggle('insight', v)}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs">
-                        <FileDown size={14} className="text-stone-400" />
-                        <span>Export Completions</span>
-                      </div>
-                      <Switch
-                        checked={user?.preferences?.notificationSettings?.export}
-                        onCheckedChange={(v) => handleNotificationTypeToggle('export', v)}
-                      />
-                    </div>
-                  </div>
-                </div>
               </CardContent>
             </Card>
-            <Card className="rounded-3xl border-stone-200 shadow-sm bg-white/50 backdrop-blur-sm">
+            <Card className="rounded-3xl border-rose-100 shadow-sm bg-rose-50/20">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg"><Shield size={18} /> Privacy & Data</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-lg text-rose-900"><Shield size={18} /> Danger Zone</CardTitle>
+                <CardDescription>Irreversible data operations.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Button variant="outline" className="w-full justify-start gap-2 rounded-xl">
-                  <Download size={16} /> Export All Journals (.json)
+                <Button variant="outline" onClick={handleExportFullSanctuary} className="w-full justify-start gap-2 rounded-xl border-stone-200 hover:bg-stone-50">
+                  <Download size={16} /> Export All Data (.json)
                 </Button>
-                <Button variant="outline" onClick={handleRecoverManifest} className="w-full justify-start gap-2 rounded-xl">
-                  <RefreshCw size={16} /> Manifest Recovery
-                </Button>
-                <Button variant="outline" className="w-full justify-start gap-2 rounded-xl text-red-600 hover:text-red-700 hover:bg-red-50">
-                  <Trash2 size={16} /> Delete Account Permanently
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start gap-2 rounded-xl text-rose-600 border-rose-100 hover:bg-rose-50">
+                      <Trash2 size={16} /> Permanent Account Purge
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent className="rounded-4xl">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="font-serif">Absolute Purge Confirmation</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently erase your profile, all journals, and every legacy transmission. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel className="rounded-xl">Retain Sanctuary</AlertDialogCancel>
+                      <AlertDialogAction onClick={deleteAccount} className="rounded-xl bg-rose-600 text-white">Purge Everything</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </CardContent>
-              <CardFooter className="pt-0">
-                <p className="text-[10px] text-stone-400 italic">Lumina encrypts all entries before storage in the Global Durable Object.</p>
+              <CardFooter>
+                <p className="text-[10px] text-stone-400 italic">Data is encrypted at rest and purged immediately upon request.</p>
               </CardFooter>
             </Card>
-            {isSaving && (
-              <div className="flex items-center justify-center p-4 bg-stone-50 rounded-2xl border border-dashed border-stone-200">
-                <Loader2 className="animate-spin text-stone-400 mr-2 h-4 w-4" />
-                <span className="text-xs text-stone-500 font-serif">Synchronizing with cloud...</span>
-              </div>
-            )}
           </div>
         </div>
       </div>
     </AppLayout>
   );
+}
+const dateFnsFormat = (date: Date, fmt: string) => {
+  return date.toISOString().split('T')[0]; // Simple fallback for filename
 }

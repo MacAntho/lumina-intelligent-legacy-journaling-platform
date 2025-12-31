@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Search, SlidersHorizontal, History, Star, Bookmark, Calendar, Type, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Search, SlidersHorizontal, History, Star, Bookmark, Calendar, Type, Sparkles, X, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +29,7 @@ export function AdvancedSearch<T extends Record<string, any>>({
   const clearRecentSearches = useAppStore(s => s.clearRecentSearches);
   const savedSearches = useAppStore(s => s.savedSearches);
   const saveSearch = useAppStore(s => s.saveSearch);
+  const searchSuggestions = useAppStore(s => s.searchSuggestions);
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({});
@@ -65,12 +66,13 @@ export function AdvancedSearch<T extends Record<string, any>>({
       return true;
     });
   }, [items, query, filters, searchFields, context]);
+  const stableOnResults = useCallback(onResults, []);
   const resultSignature = useMemo(() => {
     return JSON.stringify(filteredItems.map(i => i.id).sort());
   }, [filteredItems]);
   useEffect(() => {
-    onResults(filteredItems);
-  }, [resultSignature, onResults]);
+    stableOnResults(filteredItems);
+  }, [resultSignature, stableOnResults, filteredItems]);
   const handleApplySaved = (saved: any) => {
     setQuery(saved.query);
     setFilters(saved.filters);
@@ -80,15 +82,15 @@ export function AdvancedSearch<T extends Record<string, any>>({
     const name = query || `Search ${dateFnsFormat(new Date(), 'HH:mm')}`;
     saveSearch({ name, query, filters });
   };
-  const toggleFilterArray = (key: 'moods' | 'tags' | 'templateIds', value: string) => {
-    setFilters(prev => {
-      const current = (prev[key] as string[]) || [];
-      const next = current.includes(value)
-        ? current.filter(v => v !== value)
-        : [...current, value];
-      return { ...prev, [key]: next };
-    });
-  };
+  const suggestions = useMemo(() => {
+    if (!query) return [];
+    const q = query.toLowerCase();
+    const matches = [
+      ...searchSuggestions.titles.filter(t => t.toLowerCase().includes(q)).map(t => ({ text: t, type: 'title' })),
+      ...searchSuggestions.tags.filter(t => t.toLowerCase().includes(q)).map(t => ({ text: t, type: 'tag' }))
+    ];
+    return matches.slice(0, 5);
+  }, [query, searchSuggestions]);
   return (
     <div className="w-full space-y-4">
       <div className="relative flex items-center gap-2">
@@ -104,13 +106,25 @@ export function AdvancedSearch<T extends Record<string, any>>({
             className="pl-11 pr-4 py-6 rounded-2xl border-stone-200 bg-white/50 backdrop-blur-sm focus-visible:ring-stone-200 text-lg font-serif"
           />
           <AnimatePresence>
-            {isDropdownOpen && (recentSearches.length > 0 || savedSearches.length > 0) && (
+            {isDropdownOpen && (recentSearches.length > 0 || savedSearches.length > 0 || suggestions.length > 0) && (
               <motion.div
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 5 }}
                 className="absolute top-full left-0 right-0 mt-2 bg-white border border-stone-100 rounded-2xl shadow-xl z-50 overflow-hidden"
               >
+                {suggestions.length > 0 && (
+                  <div className="p-2 border-b border-stone-50">
+                    <p className="px-3 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Suggestions</p>
+                    {suggestions.map((s, idx) => (
+                      <button key={idx} onClick={() => setQuery(s.text)} className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-stone-50 text-sm transition-colors">
+                        <Sparkles size={14} className="text-amber-500" />
+                        <span className="flex-1 text-left">{s.text}</span>
+                        <span className="text-[10px] text-stone-300 italic">{s.type}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {savedSearches.length > 0 && (
                   <div className="p-2 border-b border-stone-50">
                     <p className="px-3 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Saved Patterns</p>
@@ -157,88 +171,48 @@ export function AdvancedSearch<T extends Record<string, any>>({
             className="overflow-hidden"
           >
             <div className="bg-stone-50 border border-stone-200 rounded-3xl p-6 grid grid-cols-1 md:grid-cols-3 gap-8">
-              {context === 'journal' && (
-                <>
-                  <div className="space-y-4">
-                    <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
-                      <Sparkles size={12} /> Emotional Map
-                    </Label>
-                    <div className="flex flex-wrap gap-2">
-                      {['High', 'Normal', 'Low', 'Inspired', 'Tired'].map(m => (
-                        <Badge
-                          key={m}
-                          variant={filters.moods?.includes(m) ? 'default' : 'outline'}
-                          className="cursor-pointer rounded-full px-3 py-1 text-[10px]"
-                          onClick={() => toggleFilterArray('moods', m)}
-                        >
-                          {m}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="pt-2">
-                      <Label className="text-[9px] text-stone-400 uppercase font-bold">Min Intensity</Label>
-                      <div className="flex gap-1 mt-1">
-                        {[1, 2, 3, 4, 5].map(star => (
-                          <button
-                            key={star}
-                            onClick={() => setFilters(f => ({ ...f, minStars: f.minStars === star ? 0 : star }))}
-                            className={cn("p-1", (filters.minStars || 0) >= star ? "text-amber-500" : "text-stone-300")}
-                          >
-                            <Star size={14} fill={(filters.minStars || 0) >= star ? "currentColor" : "none"} />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
-                      <Type size={12} /> Writing Depth
-                    </Label>
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-stone-600">Deep Dives (&gt; 250 words)</span>
-                        <Checkbox
-                          checked={filters.minWordCount === 250}
-                          onCheckedChange={(v) => setFilters(f => ({ ...f, minWordCount: v ? 250 : 0 }))}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-stone-600">Visual Memories</span>
-                        <Checkbox
-                          checked={!!filters.hasImages}
-                          onCheckedChange={(v) => setFilters(f => ({ ...f, hasImages: !!v }))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-              <div className={cn("space-y-4", context === 'global' && "md:col-span-2")}>
+              <div className="space-y-4">
                 <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
-                  <Calendar size={12} /> Discovery Range
+                  <Sparkles size={12} /> Emotional Map
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  {['High', 'Normal', 'Low', 'Inspired', 'Tired'].map(m => (
+                    <Badge
+                      key={m}
+                      variant={filters.moods?.includes(m) ? 'default' : 'outline'}
+                      className="cursor-pointer rounded-full px-3 py-1 text-[10px]"
+                      onClick={() => setFilters(f => ({ ...f, moods: f.moods?.includes(m) ? f.moods.filter(x => x !== m) : [...(f.moods || []), m] }))}
+                    >
+                      {m}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-4">
+                <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
+                  <Calendar size={12} /> Range
                 </Label>
                 <div className="grid grid-cols-2 gap-2">
                   <Input
                     type="date"
-                    className="h-8 text-[10px] rounded-lg border-stone-200"
+                    className="h-8 text-[10px] rounded-lg"
                     value={filters.dateRange?.start || ''}
                     onChange={(e) => setFilters(f => ({ ...f, dateRange: { ...(f.dateRange || { start: '', end: '' }), start: e.target.value } }))}
                   />
                   <Input
                     type="date"
-                    className="h-8 text-[10px] rounded-lg border-stone-200"
+                    className="h-8 text-[10px] rounded-lg"
                     value={filters.dateRange?.end || ''}
                     onChange={(e) => setFilters(f => ({ ...f, dateRange: { ...(f.dateRange || { start: '', end: '' }), end: e.target.value } }))}
                   />
                 </div>
-                <button className="w-full text-[10px] uppercase font-bold h-8 text-stone-500 hover:text-stone-900 transition-colors" onClick={() => setFilters({})}>Reset Filters</button>
               </div>
-              <div className="md:col-span-3 pt-4 border-t border-stone-200 flex justify-between items-center">
-                <span className="text-xs text-stone-400 font-serif italic">
-                  {filteredItems.length} matching items found in your sanctuary.
-                </span>
-                <Button size="sm" onClick={handleSaveCurrent} className="rounded-full bg-stone-900 text-white text-[10px] h-8 px-4">
-                  <Star size={12} className="mr-2" /> Save this Pattern
+              <div className="flex flex-col justify-end gap-2">
+                <Button onClick={handleSaveCurrent} className="rounded-xl h-9 text-xs gap-2">
+                  <Bookmark size={14} /> Save Pattern
+                </Button>
+                <Button variant="ghost" onClick={() => setFilters({})} className="h-9 text-[10px] uppercase font-bold text-stone-400">
+                  Reset
                 </Button>
               </div>
             </div>
