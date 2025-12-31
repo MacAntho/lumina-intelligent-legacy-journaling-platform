@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { JOURNAL_TEMPLATES } from '@/../shared/templates';
+import { ExportDialog } from '@/components/ExportDialog';
 import { cn } from '@/lib/utils';
 export function JournalDetail() {
   const { id } = useParams();
@@ -35,6 +36,7 @@ export function JournalDetail() {
   const [previewMode, setPreviewMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   // Initialize from draft if exists
   useEffect(() => {
     if (id && drafts[id]) {
@@ -163,7 +165,7 @@ export function JournalDetail() {
               <Button variant="ghost" size="sm" onClick={() => setPreviewMode(!previewMode)} className="rounded-full gap-2">
                 {previewMode ? <PenLine size={14} /> : <Eye size={14} />} {previewMode ? 'Edit' : 'Preview'}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => window.print()} className="rounded-full gap-2">
+              <Button variant="outline" size="sm" onClick={() => setExportOpen(true)} className="rounded-full gap-2">
                 <Download size={14} /> Export
               </Button>
             </div>
@@ -402,6 +404,14 @@ export function JournalDetail() {
           </section>
         </div>
       </div>
+      {journal && (
+        <ExportDialog 
+          open={exportOpen} 
+          onOpenChange={setExportOpen} 
+          journal={journal} 
+          entries={entries} 
+        />
+      )}
     </AppLayout>
   );
 }

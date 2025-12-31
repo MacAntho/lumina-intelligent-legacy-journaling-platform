@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api-client';
 import type { LegacyPublicData } from '@shared/types';
+import { generateJournalPdf } from '@/lib/pdf-export';
 import { Loader2, Download, Sparkles, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
@@ -34,6 +35,27 @@ export function LegacyView() {
       </div>
     );
   }
+  const handleExport = async () => {
+    if (!data) return;
+    const dummyJournal = {
+      id: 'shared',
+      userId: 'recipient',
+      templateId: 'reflective',
+      title: data.journalTitle,
+      description: `Legacy archive from ${data.authorName}`,
+      type: 'reflective' as const,
+      createdAt: new Date().toISOString()
+    };
+    const doc = await generateJournalPdf(dummyJournal, data.entries, {
+      title: data.journalTitle,
+      author: data.authorName,
+      includeImages: true,
+      includeTags: true,
+      customMessage: "This archive was shared with you through Lumina Legacy Transmission."
+    });
+    doc.save(`${data.journalTitle.toLowerCase().replace(/\s+/g, '-')}-shared.pdf`);
+  };
+
   if (!data) {
     return (
       <div className="min-h-screen bg-[#FDFCFB] flex flex-col items-center justify-center p-4 text-center">
@@ -50,7 +72,7 @@ export function LegacyView() {
             <Sparkles className="text-stone-900" size={18} />
             <span className="font-semibold text-stone-900">Lumina Legacy</span>
           </div>
-          <Button variant="outline" size="sm" onClick={() => window.print()} className="rounded-full gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport} className="rounded-full gap-2">
             <Download size={14} /> Download PDF
           </Button>
         </div>

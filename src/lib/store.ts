@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { api } from './api-client';
 import { toast } from 'sonner';
-import type { Journal, Entry, User, LegacyContact, InsightData, LoginRequest, RegisterRequest, AuthResponse, AiMessage, DailyContent } from '@shared/types';
+import type { Journal, Entry, User, LegacyContact, InsightData, LoginRequest, RegisterRequest, AuthResponse, AiMessage, DailyContent, ExportLog } from '@shared/types';
 interface AppState {
   user: User | null;
   token: string | null;
@@ -13,6 +13,7 @@ interface AppState {
   insightData: InsightData | null;
   aiChatHistory: AiMessage[];
   dailyContent: DailyContent | null;
+  exportHistory: ExportLog[];
   isLoading: boolean;
   isSaving: boolean;
   isInitialized: boolean;
@@ -31,6 +32,8 @@ interface AppState {
   addLegacyContact: (contact: Partial<LegacyContact>) => Promise<void>;
   removeLegacyContact: (id: string) => Promise<void>;
   fetchDailyContent: () => Promise<void>;
+  logExport: (log: Partial<ExportLog>) => Promise<void>;
+  fetchExportHistory: () => Promise<void>;
   sendAiMessage: (content: string) => Promise<void>;
   clearChatHistory: () => void;
 }
@@ -45,6 +48,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   insightData: null,
   aiChatHistory: JSON.parse(localStorage.getItem('lumina_chat') || '[]'),
   dailyContent: null,
+  exportHistory: [],
   isLoading: false,
   isSaving: false,
   isInitialized: false,
@@ -250,6 +254,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('Fetch daily content failed:', error);
     }
+  },
+  logExport: async (logData) => {
+    try {
+      const log = await api<ExportLog>('/api/exports', { method: 'POST', body: JSON.stringify(logData) });
+      set(state => ({ exportHistory: [log, ...state.exportHistory] }));
+    } catch (e) { console.error('Log export failed', e); }
+  },
+  fetchExportHistory: async () => {
+    try {
+      const logs = await api<ExportLog[]>('/api/exports');
+      set({ exportHistory: logs });
+    } catch (e) { console.error('Fetch export history failed', e); }
   },
   sendAiMessage: async (content) => {
     const userMsg: AiMessage = {

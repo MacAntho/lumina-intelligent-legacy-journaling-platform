@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { jwt, sign } from "hono/jwt";
 import { format } from "date-fns";
 import type { Env } from './core-utils';
-import { UserAuthEntity, JournalEntity, EntryEntity, LegacyContactEntity, LegacyShareEntity } from "./entities";
+import { UserAuthEntity, JournalEntity, EntryEntity, LegacyContactEntity, LegacyShareEntity, ExportLogEntity } from "./entities";
 import { ok, bad, notFound } from './core-utils';
 import type { LoginRequest, RegisterRequest } from "@shared/types";
 const JWT_SECRET = "lumina-secret-key-change-this";
@@ -202,5 +202,21 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       authorName: "A Lumina Resident",
       entries: entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     });
+  });
+  app.get('/api/exports', async (c) => {
+    const payload = c.get('jwtPayload');
+    const logs = await ExportLogEntity.listByUser(c.env, payload.userId);
+    return ok(c, logs);
+  });
+  app.post('/api/exports', async (c) => {
+    const payload = c.get('jwtPayload');
+    const body = await c.req.json();
+    const log = await ExportLogEntity.create(c.env, {
+      ...body,
+      id: crypto.randomUUID(),
+      userId: payload.userId,
+      timestamp: new Date().toISOString()
+    });
+    return ok(c, log);
   });
 }

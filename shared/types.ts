@@ -92,3 +92,22 @@ export interface LegacyPublicData {
   authorName: string;
   entries: Entry[];
 }
+export interface ExportOptions {
+  title: string;
+  author: string;
+  includeImages: boolean;
+  includeTags: boolean;
+  startDate?: string;
+  endDate?: string;
+  customMessage?: string;
+  highContrast?: boolean;
+}
+export interface ExportLog {
+  id: string;
+  userId: string;
+  journalId: string;
+  timestamp: string;
+  format: 'pdf' | 'json';
+  status: 'success' | 'failed';
+  options?: Partial<ExportOptions>;
+}

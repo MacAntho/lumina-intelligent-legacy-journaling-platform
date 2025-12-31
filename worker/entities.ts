@@ -1,5 +1,5 @@
 import { IndexedEntity, Env } from "./core-utils";
-import type { User, Journal, Entry, LegacyContact, LegacyShare } from "@shared/types";
+import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog } from "@shared/types";
 export interface UserAuthData {
   id: string; // email
   passwordHash: string;
@@ -97,4 +97,20 @@ export class LegacyShareEntity extends IndexedEntity<LegacyShare> {
     accessKey: "",
     createdAt: ""
   };
+}
+export class ExportLogEntity extends IndexedEntity<ExportLog> {
+  static readonly entityName = "export-log";
+  static readonly indexName = "export-logs";
+  static readonly initialState: ExportLog = {
+    id: "",
+    userId: "",
+    journalId: "",
+    timestamp: "",
+    format: "pdf",
+    status: "success"
+  };
+  static async listByUser(env: Env, userId: string): Promise<ExportLog[]> {
+    const { items } = await this.list(env, null, 1000);
+    return items.filter(l => l.userId === userId).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }
 }
