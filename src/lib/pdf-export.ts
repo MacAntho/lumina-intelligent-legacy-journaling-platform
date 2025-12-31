@@ -9,6 +9,9 @@ export async function generateJournalPdf(journal: Journal, entries: Entry[], opt
   });
   const primaryColor = options.highContrast ? '#000000' : '#1c1917';
   const secondaryColor = options.highContrast ? '#000000' : '#78716c';
+  const pageHeight = 297;
+  const margin = 20;
+  const safeBottom = 270;
   // PAGE 1: COVER
   doc.setFillColor(options.highContrast ? '#ffffff' : '#fdfcfb');
   doc.rect(0, 0, 210, 297, 'F');
@@ -31,7 +34,7 @@ export async function generateJournalPdf(journal: Journal, entries: Entry[], opt
   }
   doc.setFont('times', 'normal');
   doc.setFontSize(10);
-  doc.text('Preserved via Lumina Intelligence', 105, 270, { align: 'center' });
+  doc.text('Preserved via Lumina Intelligence', 105, 275, { align: 'center' });
   // PAGE 2: TABLE OF CONTENTS
   doc.addPage();
   doc.setFontSize(24);
@@ -45,42 +48,59 @@ export async function generateJournalPdf(journal: Journal, entries: Entry[], opt
       return true;
     })
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  filteredEntries.slice(0, 22).forEach((entry, i) => {
+  filteredEntries.slice(0, 25).forEach((entry, i) => {
     doc.setFontSize(10);
     const dateStr = format(new Date(entry.date), 'MMM dd, yyyy');
     const titleStr = entry.title || 'Untitled Entry';
     doc.text(`${i + 1}. ${dateStr}`, 20, yPos);
-    doc.text(titleStr.length > 40 ? titleStr.substring(0, 37) + '...' : titleStr, 60, yPos);
+    doc.text(titleStr.length > 40 ? titleStr.substring(0, 37) + '...' : titleStr, 65, yPos);
     yPos += 8;
   });
-  if (filteredEntries.length > 22) {
+  if (filteredEntries.length > 25) {
     doc.setFontSize(10);
-    doc.text(`... and ${filteredEntries.length - 22} more entries.`, 20, yPos);
+    doc.text(`... and ${filteredEntries.length - 25} more entries.`, 20, yPos);
   }
   // CONTENT PAGES
   filteredEntries.forEach((entry) => {
     doc.addPage();
-    // Header
+    let currentY = 20;
+    // Header (Date)
     doc.setFontSize(10);
     doc.setTextColor(secondaryColor);
-    doc.text(format(new Date(entry.date), 'EEEE, MMMM do, yyyy'), 20, 20);
+    doc.setFont('times', 'normal');
+    doc.text(format(new Date(entry.date), 'EEEE, MMMM do, yyyy'), 20, currentY);
+    currentY += 15;
     // Title
-    doc.setFontSize(22);
+    doc.setFontSize(24);
     doc.setTextColor(primaryColor);
     doc.setFont('times', 'bold');
-    doc.text(entry.title || 'Untitled Entry', 20, 35);
+    const splitTitle = doc.splitTextToSize(entry.title || 'Untitled Entry', 170);
+    doc.text(splitTitle, 20, currentY);
+    currentY += (splitTitle.length * 10) + 5;
     // Body
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
     const content = entry.content || '— No written content for this reflection —';
     const splitContent = doc.splitTextToSize(content, 170);
-    doc.text(splitContent, 20, 50);
-    let currentY = 50 + (splitContent.length * 6);
+    splitContent.forEach((line: string) => {
+      if (currentY > safeBottom) {
+        doc.addPage();
+        currentY = 30;
+        doc.setFont('times', 'normal');
+        doc.setFontSize(12);
+        doc.setTextColor(primaryColor);
+      }
+      doc.text(line, 20, currentY);
+      currentY += 7;
+    });
     // Metadata
     if (options.includeTags && entry.tags?.length > 0) {
-      if (currentY > 260) { doc.addPage(); currentY = 20; }
+      if (currentY > safeBottom - 10) {
+        doc.addPage();
+        currentY = 30;
+      }
       currentY += 10;
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       doc.setTextColor(secondaryColor);
       doc.text(`Tags: ${entry.tags.join(', ')}`, 20, currentY);
     }

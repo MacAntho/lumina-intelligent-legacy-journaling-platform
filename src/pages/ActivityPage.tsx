@@ -7,9 +7,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  History, Shield, FileDown, Share2, 
-  Sparkles, Loader2, Calendar, ChevronRight 
+import {
+  History, Shield, FileDown, Share2,
+  Sparkles, Loader2, Calendar, LayoutList
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 interface ActivityItem {
@@ -62,9 +62,9 @@ export function ActivityPage() {
           <Tabs value={filter} onValueChange={setFilter} className="w-full md:w-auto">
             <TabsList className="bg-stone-100 rounded-xl p-1">
               <TabsTrigger value="all" className="rounded-lg text-xs">All</TabsTrigger>
-              <TabsTrigger value="security" className="rounded-lg text-xs">Security</TabsTrigger>
               <TabsTrigger value="transmission" className="rounded-lg text-xs">Legacy</TabsTrigger>
               <TabsTrigger value="export" className="rounded-lg text-xs">Exports</TabsTrigger>
+              <TabsTrigger value="system" className="rounded-lg text-xs">System</TabsTrigger>
             </TabsList>
           </Tabs>
         </header>
@@ -79,9 +79,19 @@ export function ActivityPage() {
             <div className="space-y-8">
               <AnimatePresence initial={false}>
                 {filteredActivities.length === 0 ? (
-                  <div className="py-20 text-center border-2 border-dashed border-stone-100 rounded-4xl">
-                    <p className="text-stone-400 font-serif italic">No recorded activity matches your filters.</p>
-                  </div>
+                  <motion.div 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    className="py-20 text-center border-2 border-dashed border-stone-100 rounded-4xl flex flex-col items-center gap-4"
+                  >
+                    <div className="h-16 w-16 rounded-full bg-stone-50 flex items-center justify-center text-stone-300">
+                      <LayoutList size={32} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-medium text-stone-900">No events recorded</h3>
+                      <p className="text-stone-400 font-serif italic text-sm mt-1">Activity will appear here as you interact with the platform.</p>
+                    </div>
+                  </motion.div>
                 ) : (
                   filteredActivities.map((activity, idx) => (
                     <motion.div
@@ -91,22 +101,22 @@ export function ActivityPage() {
                       transition={{ delay: idx * 0.05 }}
                       className="relative md:pl-16 group"
                     >
-                      <div className="absolute left-4 md:left-4 top-1 h-4 w-4 rounded-full bg-white border-2 border-stone-200 group-hover:border-stone-900 transition-colors z-10 hidden md:block" />
-                      <Card className="rounded-3xl border-stone-100 shadow-sm hover:shadow-md transition-all overflow-hidden">
+                      <div className="absolute left-[22px] top-7 h-3 w-3 rounded-full bg-white border-2 border-stone-200 group-hover:border-stone-900 transition-colors z-10 hidden md:block shadow-sm" />
+                      <Card className="rounded-3xl border-stone-100 shadow-sm hover:shadow-md transition-all overflow-hidden bg-white/50 backdrop-blur-sm">
                         <CardContent className="p-6">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div className="flex gap-4">
-                              <div className="h-12 w-12 rounded-2xl bg-stone-50 flex items-center justify-center shrink-0">
+                              <div className="h-12 w-12 rounded-2xl bg-stone-50 flex items-center justify-center shrink-0 shadow-inner">
                                 {getIcon(activity.type)}
                               </div>
                               <div className="space-y-1">
                                 <div className="flex items-center gap-2">
                                   <h3 className="font-medium text-stone-900">{activity.title}</h3>
-                                  <Badge variant="outline" className="text-[8px] uppercase tracking-tighter h-4 px-1 rounded-sm border-stone-200">
+                                  <Badge variant="outline" className="text-[8px] uppercase tracking-tighter h-4 px-1 rounded-sm border-stone-200 font-bold bg-white">
                                     {activity.type}
                                   </Badge>
                                 </div>
-                                <p className="text-sm text-stone-500 font-light">{activity.message}</p>
+                                <p className="text-sm text-stone-500 font-light leading-snug">{activity.message}</p>
                               </div>
                             </div>
                             <div className="flex items-center md:flex-col md:items-end gap-2 text-stone-400">
@@ -118,11 +128,11 @@ export function ActivityPage() {
                               </span>
                             </div>
                           </div>
-                          {activity.metadata && (
-                            <div className="mt-4 pt-4 border-t border-stone-50 flex flex-wrap gap-2">
+                          {activity.metadata && Object.keys(activity.metadata).length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-stone-100/50 flex flex-wrap gap-2">
                               {Object.entries(activity.metadata).map(([k, v]) => (
-                                <div key={k} className="px-2 py-1 rounded-md bg-stone-50 text-[9px] text-stone-400 border border-stone-100">
-                                  <span className="font-bold uppercase mr-1">{k}:</span> {String(v)}
+                                <div key={k} className="px-2 py-0.5 rounded-md bg-stone-100/50 text-[9px] text-stone-500 border border-stone-200/50">
+                                  <span className="font-bold uppercase opacity-60 mr-1">{k}:</span> {String(v)}
                                 </div>
                               ))}
                             </div>

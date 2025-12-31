@@ -130,9 +130,11 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const notes = await NotificationEntity.listByUser(c.env, userId);
     const audits = await LegacyAuditLogEntity.listByUser(c.env, userId);
     const exports = await ExportLogEntity.listByUser(c.env, userId);
+    const journals = await JournalEntity.listByUser(c.env, userId);
+
     const stream: any[] = [
-      ...notes.map(n => ({ id: n.id, type: 'system' as const, title: n.title, message: n.message, timestamp: n.createdAt })),
-      ...audits.map(a => ({ id: a.id, type: 'security' as const, title: 'Transmission Access', message: `${a.action.toUpperCase()} by ${a.recipientEmail}`, timestamp: a.timestamp, metadata: { action: a.action, email: a.recipientEmail } })),
+      ...notes.map(n => ({ id: n.id, type: 'system' as const, title: n.title, message: n.message, timestamp: n.createdAt, metadata: { noteType: n.type } })),
+      ...audits.map(a => ({ id: a.id, type: 'transmission' as const, title: 'Legacy Access', message: `Archive for "${journals.find(j => j.id === a.journalId)?.title || 'Journal'}" was ${a.action}ed by ${a.recipientEmail}`, timestamp: a.timestamp, metadata: { action: a.action, email: a.recipientEmail } })),
       ...exports.map(e => ({ id: e.id, type: 'export' as const, title: 'Journal Export', message: `Exported to ${e.format.toUpperCase()} (${e.status})`, timestamp: e.timestamp, metadata: { format: e.format, status: e.status } }))
     ];
     return ok(c, stream.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 50));

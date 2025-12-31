@@ -6,6 +6,7 @@ import type {
   LoginRequest, RegisterRequest, AuthResponse, AiMessage,
   DailyContent, ExportLog, LegacyAuditLog, AppNotification
 } from '@shared/types';
+let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 interface AppState {
   user: User | null;
   token: string | null;
@@ -88,8 +89,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().fetchDailyContent();
       get().fetchLegacyAuditLogs();
       get().fetchNotifications();
-      // Start Heartbeat Interval
-      setInterval(() => get().heartbeat(), 300000); // Every 5 minutes
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      heartbeatInterval = setInterval(() => get().heartbeat(), 300000);
     } catch (error) {
       console.error('Initialization failed:', error);
       get().logout();
@@ -120,6 +121,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         isInitialized: true
       });
       toast.success('Sanctuary Unlocked');
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      heartbeatInterval = setInterval(() => get().heartbeat(), 300000);
     } catch (error) {
       set({ isLoading: false });
       toast.error('Invalid credentials');
@@ -142,6 +145,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         isInitialized: true
       });
       toast.success('Your digital legacy has begun.');
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      heartbeatInterval = setInterval(() => get().heartbeat(), 300000);
     } catch (error) {
       set({ isLoading: false });
       toast.error('Could not create sanctuary');
@@ -149,8 +154,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   logout: () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
     localStorage.removeItem('lumina_token');
     localStorage.removeItem('lumina_chat');
+    localStorage.removeItem('lumina_drafts');
     set({
       user: null,
       token: null,
@@ -164,7 +174,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       dailyContent: null,
       notifications: [],
       unreadCount: 0,
-      isInitialized: false
+      isInitialized: false,
+      isLoading: false
     });
   },
   updateProfile: async (profile) => {
@@ -232,14 +243,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   setDraft: (journalId, draft) => {
-    const currentDrafts = get().drafts;
-    const nextDrafts = { ...currentDrafts, [journalId]: draft };
+    const drafts = get().drafts;
+    const nextDrafts = { ...drafts, [journalId]: draft };
     set({ drafts: nextDrafts });
     localStorage.setItem('lumina_drafts', JSON.stringify(nextDrafts));
   },
   clearDraft: (journalId) => {
-    const currentDrafts = get().drafts;
-    const { [journalId]: _, ...rest } = currentDrafts;
+    const drafts = get().drafts;
+    const { [journalId]: _, ...rest } = drafts;
     set({ drafts: rest });
     localStorage.setItem('lumina_drafts', JSON.stringify(rest));
   },
@@ -331,7 +342,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchNotifications: async () => {
     try {
       const notifications = await api<AppNotification[]>('/api/notifications');
-      set({ 
+      set({
         notifications,
         unreadCount: notifications.filter(n => !n.isRead).length
       });
@@ -339,7 +350,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   markNotificationRead: async (id) => {
     const prev = get().notifications;
-    set({ 
+    set({
       notifications: prev.map(n => n.id === id ? { ...n, isRead: true } : n),
       unreadCount: Math.max(0, get().unreadCount - 1)
     });
@@ -351,7 +362,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   markAllNotificationsRead: async () => {
     const prev = get().notifications;
-    set({ 
+    set({
       notifications: prev.map(n => ({ ...n, isRead: true })),
       unreadCount: 0
     });
@@ -364,7 +375,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteNotification: async (id) => {
     const prev = get().notifications;
     const note = prev.find(n => n.id === id);
-    set({ 
+    set({
       notifications: prev.filter(n => n.id !== id),
       unreadCount: note && !note.isRead ? Math.max(0, get().unreadCount - 1) : get().unreadCount
     });

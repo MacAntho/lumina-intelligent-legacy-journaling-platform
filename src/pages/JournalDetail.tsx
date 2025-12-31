@@ -69,6 +69,10 @@ export function JournalDetail() {
       return `**${field.label}:** ${val}`;
     }).filter(Boolean);
     const content = summaryParts.join('\n');
+
+    const moodValue = formData.mood_score || formData.intensity || 'Normal';
+    const moodDescriptor = typeof moodValue === 'number' ? `${moodValue} Stars` : String(moodValue);
+
     await addEntry({
       journalId: id,
       title: title || `Reflection ${format(new Date(), 'MMM dd')}`,
@@ -76,7 +80,7 @@ export function JournalDetail() {
       structuredData: formData,
       tags,
       images,
-      mood: String(formData.mood_score || formData.intensity || 'Normal')
+      mood: moodDescriptor
     });
     setFormData({});
     setTitle('');
@@ -118,7 +122,8 @@ export function JournalDetail() {
   };
   const updateField = useCallback((fieldId: string, value: any, type?: string) => {
     let finalValue = value;
-    if (type === 'number') finalValue = value === '' ? 0 : Number(value);
+    // Ensure numeric types are strictly cast for AI Insight consumption
+    if (type === 'number' || fieldId === 'mood_score' || fieldId === 'intensity') finalValue = value === '' ? 0 : Number(value);
     setFormData(prev => ({ ...prev, [fieldId]: finalValue }));
   }, []);
   const renderMarkdown = (text: string) => {
