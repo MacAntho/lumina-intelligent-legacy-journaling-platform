@@ -13,7 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 interface ActivityItem {
   id: string;
-  type: 'security' | 'export' | 'transmission' | 'system';
+  type: 'export' | 'transmission' | 'system' | 'security';
   title: string;
   message: string;
   timestamp: string;
@@ -101,11 +101,10 @@ export function ActivityPage() {
                       transition={{ delay: idx * 0.03 }}
                       className="relative md:pl-16 group"
                     >
-                      {/* Pulse point */}
                       <div className="absolute left-[22px] top-7 h-3 w-3 rounded-full bg-white border-2 border-stone-200 group-hover:border-stone-900 transition-all z-10 hidden md:block shadow-sm">
                         {idx === 0 && <div className="absolute inset-[-4px] rounded-full border border-stone-900 animate-ping opacity-20" />}
                       </div>
-                      <Card 
+                      <Card
                         className={cn(
                           "rounded-3xl border-stone-100 shadow-sm transition-all overflow-hidden cursor-pointer bg-white",
                           expandedId === activity.id ? "ring-2 ring-stone-900 shadow-xl" : "hover:shadow-md hover:border-stone-200"

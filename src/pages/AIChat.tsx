@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { Sparkles, Send, Trash2, Bot, User, BrainCircuit, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -68,10 +69,10 @@ export function AIChat() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-md">
                 {quickPrompts.map(p => (
-                  <Button 
-                    key={p} 
-                    variant="outline" 
-                    className="rounded-2xl text-xs h-12 border-stone-200 hover:border-stone-400 hover:bg-stone-50 justify-start px-4 font-serif italic" 
+                  <Button
+                    key={p}
+                    variant="outline"
+                    className="rounded-2xl text-xs h-12 border-stone-200 hover:border-stone-400 hover:bg-stone-50 justify-start px-4 font-serif italic"
                     onClick={() => setInput(p)}
                   >
                     "{p}"
@@ -118,7 +119,7 @@ export function AIChat() {
                   <div className="h-10 w-10 rounded-2xl bg-white border border-stone-100 flex items-center justify-center text-amber-600 shadow-sm">
                     <Loader2 size={18} className="animate-spin" />
                   </div>
-                  <div className="bg-white border border-stone-100 px-6 py-4 rounded-3xl rounded-tl-none shadow-sm flex items-center gap-2">
+                  <div className="bg-white border border-stone-100 px-6 py-4 rounded-3xl rounded-tl-none shadow-sm flex items-center gap-2 min-h-[56px]">
                     <span className="text-stone-400 text-sm font-serif italic">Lumina is reflecting</span>
                     <div className="flex gap-1">
                       <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0 }} className="w-1 h-1 bg-amber-500 rounded-full" />
