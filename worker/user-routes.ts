@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { jwt, sign } from "hono/jwt";
 import { format } from "date-fns";
 import type { Env } from './core-utils';
-import { 
-  UserAuthEntity, JournalEntity, EntryEntity, 
+import {
+  UserAuthEntity, JournalEntity, EntryEntity,
   LegacyContactEntity, LegacyShareEntity, ExportLogEntity,
   LegacyAuditLogEntity
 } from "./entities";
@@ -13,7 +13,7 @@ const JWT_SECRET = "lumina-secret-key-change-this";
 async function hashPassword(password: string, salt: string) {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits", "deriveKey"]);
-  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: enc.encode(salt), iterations: 100000, hash: "SHA-256" }, keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: enc.encode(salt), iterations: 100000, hash: "SHA-256" }, keyMaterial, { name: "AES-GCM", length: 256 }, true, ["encrypt", "deriveKey"]);
   const exported = await crypto.subtle.exportKey("raw", key);
   return btoa(String.fromCharCode(...new Uint8Array(exported)));
 }
@@ -49,13 +49,12 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     if (!userAuth) return bad(c, 'Invalid credentials');
     const hash = await hashPassword(body.password, userAuth.salt);
     if (hash !== userAuth.passwordHash) return bad(c, 'Invalid credentials');
-    // Update Heartbeat on Login
     const updatedProfile = { ...userAuth.profile, lastHeartbeatAt: new Date().toISOString() };
     await new UserAuthEntity(c.env, body.email.toLowerCase()).patch({ profile: updatedProfile });
     const token = await sign({ userId: userAuth.profile.id, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
     return ok(c, { user: updatedProfile, token });
   });
-  // Public Legacy Routes
+  // Public Legacy Routes (Excluded from JWT Middleware)
   app.get('/api/public/legacy/:shareId', async (c) => {
     const shareId = c.req.param('shareId');
     const key = c.req.query('key');
@@ -76,7 +75,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     if (passwordRequired) {
       return ok(c, metadata);
     }
-    // No password required - record audit and return data
     await LegacyAuditLogEntity.create(c.env, {
       id: crypto.randomUUID(),
       userId: share.userId,
@@ -95,13 +93,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const shareInst = new LegacyShareEntity(c.env, shareId);
     if (!(await shareInst.exists())) return notFound(c);
     const share = await shareInst.getState();
-    // Verify password if set
     if (share.passwordHash) {
-      const auth = await new UserAuthEntity(c.env, share.recipientEmail).getState(); // Use a fixed salt or derived one
-      const hash = await hashPassword(password, "legacy-salt"); // Simplified for demo
+      const hash = await hashPassword(password, "legacy-salt");
       if (hash !== share.passwordHash) return bad(c, 'Access Denied');
     }
-    // Audit view
     await LegacyAuditLogEntity.create(c.env, {
       id: crypto.randomUUID(),
       userId: share.userId,
@@ -201,9 +196,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         text,
         value: Math.round((count / Math.max(1, entries.length)) * 100)
       }));
-    if (topTopics.length === 0) {
-      topTopics.push({ text: 'Discovery', value: 100 });
-    }
+    if (topTopics.length === 0) topTopics.push({ text: 'Discovery', value: 100 });
     return ok(c, {
       moodTrends,
       writingFrequency: Object.entries(frequency).map(([day, count]) => ({ day, count })),
@@ -217,7 +210,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     let prompt = "How did you find stillness today?";
     let affirmation = "I am growing through my reflections.";
     if (lastJournal?.templateId === 'fitness') {
-      prompt = "Reflect on how your body feels after today's movement. What did it teach you about your limits?";
+      prompt = "Reflect on how your body feels after movement. What did it teach you about your limits?";
       affirmation = "My body is a capable vessel for my spirit.";
     } else if (lastJournal?.templateId === 'gratitude') {
       prompt = "What's one thing that happened today that you didn't expect, but are thankful for?";
@@ -262,12 +255,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const shareId = crypto.randomUUID();
     const accessKey = Math.random().toString(36).slice(-8);
     let passwordHash: string | undefined;
-    if (password) {
-      passwordHash = await hashPassword(password, "legacy-salt");
-    }
-    const expiresAt = expiryDays > 0 
-      ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString()
-      : undefined;
+    if (password) passwordHash = await hashPassword(password, "legacy-salt");
+    const expiresAt = expiryDays > 0 ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString() : undefined;
     const share = await LegacyShareEntity.create(c.env, {
       id: shareId,
       journalId,
@@ -281,7 +270,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       viewCount: 0,
       createdAt: new Date().toISOString()
     });
-    // Audit creation
     await LegacyAuditLogEntity.create(c.env, {
       id: crypto.randomUUID(),
       userId: payload.userId,
@@ -315,7 +303,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     return ok(c, contact);
   });
   app.delete('/api/legacy-contacts/:id', async (c) => {
-    const payload = c.get('jwtPayload');
     const id = c.req.param('id');
     await LegacyContactEntity.delete(c.env, id);
     return ok(c, true);

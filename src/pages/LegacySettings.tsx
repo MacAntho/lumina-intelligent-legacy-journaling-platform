@@ -7,13 +7,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  Heart, UserPlus, Trash2, Mail, ShieldCheck, Clock, 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Heart, UserPlus, Trash2, Mail, ShieldCheck, Clock,
   Loader2, History, Link as LinkIcon, ShieldAlert,
   Calendar, Eye, Download, Printer, Lock, Info
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api-client';
+import { cn } from '@/lib/utils';
 import type { LegacyShare, LegacyAuditLog } from '@shared/types';
 import { format, formatDistanceToNow } from 'date-fns';
 export function LegacySettings() {
@@ -27,11 +35,9 @@ export function LegacySettings() {
   const user = useAppStore(s => s.user);
   const [shareLinks, setShareLinks] = useState<Record<string, string>>({});
   const [generatingFor, setGeneratingFor] = useState<string | null>(null);
-  // New Contact State
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [relationship, setRelationship] = useState('');
-  // Advanced Share Options
   const [selectedPermissions, setSelectedPermissions] = useState({ view: true, download: false, print: false });
   const [sharePassword, setSharePassword] = useState('');
   const [shareHint, setShareHint] = useState('');
@@ -75,7 +81,6 @@ export function LegacySettings() {
       setGeneratingFor(null);
     }
   };
-  const inactivityDays = 30; // Mocked setting
   const lastHeartbeat = user?.lastHeartbeatAt ? new Date(user.lastHeartbeatAt) : new Date();
   return (
     <AppLayout container>
@@ -102,7 +107,6 @@ export function LegacySettings() {
           </Card>
         </header>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column: Recipients */}
           <div className="lg:col-span-1 space-y-8">
             <Card className="rounded-3xl border-stone-100 dark:border-stone-800 shadow-sm">
               <CardHeader>
@@ -167,7 +171,6 @@ export function LegacySettings() {
               </CardContent>
             </Card>
           </div>
-          {/* Right Columns: Sharing Controls & Audit */}
           <div className="lg:col-span-2 space-y-8">
             <Card className="rounded-4xl border-stone-100 dark:border-stone-800 shadow-sm overflow-hidden">
               <div className="bg-stone-50 border-b border-stone-100 p-6">
@@ -218,7 +221,9 @@ export function LegacySettings() {
                       <div className="relative">
                         <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300" size={14} />
                         <Select value={expiryDays} onValueChange={setExpiryDays}>
-                          <SelectTrigger className="pl-9 rounded-xl text-xs h-10"><SelectValue placeholder="Link Expiry" /></SelectTrigger>
+                          <SelectTrigger className="pl-9 rounded-xl text-xs h-10">
+                            <SelectValue placeholder="Link Expiry" />
+                          </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="7">Expire in 7 days</SelectItem>
                             <SelectItem value="30">Expire in 30 days</SelectItem>
@@ -239,9 +244,9 @@ export function LegacySettings() {
                           <span className="font-medium text-sm">{j.title}</span>
                           <span className="text-[10px] text-stone-400">{j.type}</span>
                         </div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           disabled={generatingFor === j.id}
                           onClick={() => handleGenerateLink(j.id)}
                           className="rounded-full h-8 text-xs hover:bg-stone-900 hover:text-white"

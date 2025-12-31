@@ -3,14 +3,16 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api-client';
 import type { LegacyPublicData, Journal } from '@shared/types';
 import { generateJournalPdf } from '@/lib/pdf-export';
-import { 
-  Loader2, Download, Sparkles, Calendar, Lock, 
+import {
+  Loader2, Download, Sparkles, Calendar, Lock,
   ArrowRight, ShieldAlert, Book, Info, AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 export function LegacyView() {
   const { shareId } = useParams();
   const [searchParams] = useSearchParams();
@@ -34,6 +36,9 @@ export function LegacyView() {
     };
     if (shareId && key) {
       fetchShared();
+    } else {
+      setLoading(false);
+      setError("Missing archive access credentials.");
     }
   }, [shareId, key]);
   const handleVerifyPassword = async () => {
@@ -53,23 +58,28 @@ export function LegacyView() {
   };
   const handleExport = async () => {
     if (!data || !data.entries) return;
-    const dummyJournal: Journal = {
-      id: 'shared',
-      userId: 'recipient',
-      templateId: 'reflective',
-      title: data.journalTitle,
-      description: `Legacy archive from ${data.authorName}`,
-      type: 'reflective',
-      createdAt: new Date().toISOString()
-    };
-    const doc = await generateJournalPdf(dummyJournal, data.entries, {
-      title: data.journalTitle,
-      author: data.authorName,
-      includeImages: true,
-      includeTags: true,
-      customMessage: "This archive was shared with you through the Lumina Legacy Transmission Moat."
-    });
-    doc.save(`${data.journalTitle.toLowerCase().replace(/\s+/g, '-')}-shared.pdf`);
+    try {
+      const dummyJournal: Journal = {
+        id: 'shared',
+        userId: 'recipient',
+        templateId: 'reflective',
+        title: data.journalTitle,
+        description: `Legacy archive from ${data.authorName}`,
+        type: 'reflective',
+        createdAt: new Date().toISOString()
+      };
+      const doc = await generateJournalPdf(dummyJournal, data.entries, {
+        title: data.journalTitle,
+        author: data.authorName,
+        includeImages: true,
+        includeTags: true,
+        customMessage: "This archive was shared through the Lumina Legacy Transmission Moat."
+      });
+      doc.save(`${data.journalTitle.toLowerCase().replace(/\s+/g, '-')}-shared.pdf`);
+      toast.success("Archive saved successfully.");
+    } catch (e) {
+      toast.error("Failed to generate PDF.");
+    }
   };
   if (loading) {
     return (
@@ -79,7 +89,7 @@ export function LegacyView() {
       </div>
     );
   }
-  if (error && !data?.entries) {
+  if (error && (!data || !data.entries)) {
     return (
       <div className="min-h-screen bg-[#FDFCFB] flex flex-col items-center justify-center p-4 text-center space-y-4">
         <div className="h-16 w-16 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center">
@@ -91,7 +101,6 @@ export function LegacyView() {
       </div>
     );
   }
-  // Password Entrance
   if (data?.passwordRequired && !data.entries) {
     return (
       <div className="min-h-screen bg-[#FDFCFB] flex flex-col items-center justify-center p-4">
@@ -107,9 +116,9 @@ export function LegacyView() {
           </div>
           <div className="space-y-4">
             <div className="relative">
-              <Input 
-                type="password" 
-                placeholder="Password" 
+              <Input
+                type="password"
+                placeholder="Password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleVerifyPassword()}
@@ -126,8 +135,8 @@ export function LegacyView() {
                 <AlertCircle size={14} /> {error}
               </div>
             )}
-            <Button 
-              onClick={handleVerifyPassword} 
+            <Button
+              onClick={handleVerifyPassword}
               disabled={verifying || !password}
               className="w-full h-14 bg-stone-900 text-white rounded-2xl shadow-xl shadow-stone-200 group"
             >
@@ -143,13 +152,6 @@ export function LegacyView() {
   if (!data) return null;
   return (
     <div className="min-h-screen bg-[#FDFCFB] selection:bg-stone-200">
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          body { background: white !important; }
-          ${!data.permissions.canPrint ? 'body { display: none !important; }' : ''}
-        }
-      `}</style>
       <nav className="border-b border-stone-100 bg-white/80 backdrop-blur-md sticky top-0 z-50 no-print">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -171,24 +173,20 @@ export function LegacyView() {
         </div>
       </nav>
       <main className="max-w-7xl mx-auto px-6 py-20 lg:py-32 flex flex-col lg:flex-row gap-16">
-        {/* Table of Contents Sidebar */}
         <aside className="lg:w-64 shrink-0 no-print">
           <div className="sticky top-32 space-y-8">
             <div className="space-y-4">
               <h4 className="text-[10px] uppercase font-bold tracking-[0.2em] text-stone-400">Archive Index</h4>
               <nav className="space-y-2">
                 {data.entries?.slice(0, 15).map(entry => (
-                  <a 
-                    key={entry.id} 
-                    href={`#${entry.id}`} 
+                  <a
+                    key={entry.id}
+                    href={`#${entry.id}`}
                     className="block text-xs text-stone-500 hover:text-stone-900 truncate font-serif transition-colors"
                   >
                     {entry.title || 'Reflection'}
                   </a>
                 ))}
-                {data.entries && data.entries.length > 15 && (
-                  <span className="text-[10px] text-stone-300 italic">... and {data.entries.length - 15} more</span>
-                )}
               </nav>
             </div>
             <div className="p-6 bg-stone-50 rounded-3xl border border-stone-100 space-y-4">
@@ -197,7 +195,7 @@ export function LegacyView() {
               </div>
               <div>
                 <h5 className="text-xs font-bold text-stone-900">Transmission Info</h5>
-                <p className="text-[10px] text-stone-500 mt-1">This archive is shared with specific permissions and may expire.</p>
+                <p className="text-[10px] text-stone-500 mt-1">Granular permissions configured by the author.</p>
               </div>
               {data.expiresAt && (
                 <div className="pt-2 border-t border-stone-100">
@@ -208,7 +206,6 @@ export function LegacyView() {
             </div>
           </div>
         </aside>
-        {/* Content Column */}
         <div className="flex-1 max-w-2xl space-y-32">
           <header className="text-center pb-20 border-b border-stone-100">
             <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-stone-400 mb-6">Secured Heritage Archive</p>
@@ -216,7 +213,7 @@ export function LegacyView() {
             <div className="h-px w-24 bg-stone-200 mx-auto" />
           </header>
           <div className="space-y-48">
-            {(!data.entries || data.entries.length === 0) ? (
+            {!data.entries || data.entries.length === 0 ? (
               <div className="text-center py-40 bg-stone-50 rounded-4xl border border-dashed border-stone-200">
                 <p className="italic text-stone-400 font-serif">The transmission is currently empty.</p>
               </div>
@@ -231,13 +228,6 @@ export function LegacyView() {
                   <div className="text-xl leading-relaxed text-stone-700 font-serif whitespace-pre-wrap selection:bg-stone-200">
                     {entry.content}
                   </div>
-                  {entry.tags?.length > 0 && (
-                    <div className="mt-12 pt-8 border-t border-stone-50 flex flex-wrap gap-2 no-print">
-                      {entry.tags.map(tag => (
-                        <span key={tag} className="text-[10px] font-bold uppercase tracking-widest text-stone-400 bg-stone-50 px-3 py-1 rounded-full border border-stone-100">#{tag}</span>
-                      ))}
-                    </div>
-                  )}
                 </article>
               ))
             )}
