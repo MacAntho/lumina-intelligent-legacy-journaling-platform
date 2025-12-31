@@ -81,7 +81,8 @@ function runSetupCommands() {
     "bun add jspdf jspdf-autotable",
     "bun add bcryptjs",
     "bun add lucide-react@latest",
-    "bun add fuse.js"
+    "bun add fuse.js",
+    "bun add date-fns"
 ];
     
     if (commands.length === 0) {
