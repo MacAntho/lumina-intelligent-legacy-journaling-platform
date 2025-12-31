@@ -3,7 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BookText, Plus, Calendar, TrendingUp, Trash2, Loader2, Library, Check, ChevronRight } from 'lucide-react';
+import { Plus, Calendar, TrendingUp, Trash2, Loader2, Library, Check, ChevronRight, Book } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -31,7 +31,7 @@ export function Dashboard() {
       title: customTitle || selectedTemplate.defaultTitle,
       description: customDesc || selectedTemplate.description,
       templateId: selectedTemplate.id,
-      type: 'reflective' // Legacy type field kept for safety
+      type: 'reflective' 
     });
     setIsCreateOpen(false);
     setStep('template');
@@ -77,7 +77,8 @@ export function Dashboard() {
                     </DialogHeader>
                     <div className="grid grid-cols-2 gap-4">
                       {JOURNAL_TEMPLATES.map((t) => {
-                        const Icon = (LucideIcons as any)[t.icon] || LucideIcons.Book;
+                        const IconComponent = (LucideIcons as any)[t.icon] || Book;
+                        const colorClass = `bg-${t.color}-500`;
                         return (
                           <button
                             key={t.id}
@@ -87,8 +88,8 @@ export function Dashboard() {
                               selectedTemplate.id === t.id ? "border-stone-900 bg-stone-50" : "border-stone-100"
                             )}
                           >
-                            <div className={cn("p-2 rounded-xl mb-3 text-white", `bg-${t.color}-500`)} style={{ backgroundColor: t.color }}>
-                              <Icon size={20} />
+                            <div className={cn("p-2 rounded-xl mb-3 text-white", colorClass)}>
+                              <IconComponent size={20} />
                             </div>
                             <h4 className="font-medium text-stone-900">{t.name}</h4>
                             <p className="text-xs text-stone-500 mt-1 line-clamp-1">{t.description}</p>
@@ -168,7 +169,7 @@ export function Dashboard() {
                 <>
                   {journals.map((journal) => {
                     const template = JOURNAL_TEMPLATES.find(t => t.id === journal.templateId) || JOURNAL_TEMPLATES[0];
-                    const Icon = (LucideIcons as any)[template.icon] || LucideIcons.Book;
+                    const IconComponent = (LucideIcons as any)[template.icon] || Book;
                     return (
                       <div key={journal.id} className="relative group">
                         <Link to={`/journal/${journal.id}`}>
@@ -176,7 +177,7 @@ export function Dashboard() {
                             <CardHeader>
                               <div className="flex justify-between items-start mb-2">
                                 <div className="p-2 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-600 group-hover:scale-110 transition-transform">
-                                  <Icon size={20} />
+                                  <IconComponent size={20} />
                                 </div>
                                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
                                   {template.name}

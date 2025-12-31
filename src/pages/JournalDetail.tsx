@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronLeft, Send, Sparkles, Calendar, Loader2, Download, Star } from 'lucide-react';
+import { ChevronLeft, Send, Sparkles, Calendar, Loader2, Download, Star, Book } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,11 +25,12 @@ export function JournalDetail() {
   const template = JOURNAL_TEMPLATES.find(t => t.id === journal?.templateId) || JOURNAL_TEMPLATES[0];
   const [formData, setFormData] = useState<Record<string, any>>({});
   useEffect(() => {
-    if (id) fetchEntries(id);
+    if (id) {
+      fetchEntries(id);
+    }
   }, [id, fetchEntries]);
   const handleSave = async () => {
     if (!id) return;
-    // Construct summarized content from structured fields
     const summaryParts = template.fields.map(field => {
       const val = formData[field.id];
       if (!val) return null;
@@ -40,16 +41,20 @@ export function JournalDetail() {
       journalId: id,
       content,
       structuredData: formData,
-      mood: formData.mood_score?.toString() || formData.intensity?.toString() || 'Normal'
+      mood: (formData.mood_score || formData.intensity || 'Normal').toString()
     });
     setFormData({});
     toast.success('Reflection preserved.');
   };
-  const updateField = (fieldId: string, value: any) => {
-    setFormData(prev => ({ ...prev, [fieldId]: value }));
-  };
+  const updateField = useCallback((fieldId: string, value: any, type?: string) => {
+    let finalValue = value;
+    if (type === 'number') {
+      finalValue = value === '' ? 0 : Number(value);
+    }
+    setFormData(prev => ({ ...prev, [fieldId]: finalValue }));
+  }, []);
   if (!journal) return <div className="p-20 text-center">Journal not found</div>;
-  const Icon = (LucideIcons as any)[template.icon] || LucideIcons.Book;
+  const IconComponent = (LucideIcons as any)[template.icon] || Book;
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto px-6 py-12 print:p-0">
@@ -66,7 +71,7 @@ export function JournalDetail() {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <div className="p-1.5 rounded-lg bg-stone-100 text-stone-900">
-                  <Icon size={14} />
+                  <IconComponent size={14} />
                 </div>
                 <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-stone-500">{template.name}</div>
               </div>
@@ -101,7 +106,7 @@ export function JournalDetail() {
                       placeholder={field.placeholder}
                       className="rounded-xl border-stone-100"
                       value={formData[field.id] || ''}
-                      onChange={(e) => updateField(field.id, e.target.value)}
+                      onChange={(e) => updateField(field.id, e.target.value, 'number')}
                     />
                   ) : field.type === 'select' ? (
                     <Select onValueChange={(val) => updateField(field.id, val)} value={formData[field.id]}>

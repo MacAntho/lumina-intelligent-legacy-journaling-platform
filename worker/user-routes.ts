@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { jwt, sign, verify } from "hono/jwt";
+import { jwt, sign } from "hono/jwt";
+import { format } from "date-fns";
 import type { Env } from './core-utils';
 import { UserAuthEntity, JournalEntity, EntryEntity, LegacyContactEntity } from "./entities";
 import { ok, bad, notFound } from './core-utils';
@@ -93,8 +94,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const payload = c.get('jwtPayload');
     const entries = await EntryEntity.listByUser(c.env, payload.userId);
     const frequency: Record<string, number> = { Sun:0, Mon:0, Tue:0, Wed:0, Thu:0, Fri:0, Sat:0 };
-    entries.forEach(e => frequency[['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(e.date).getUTCDay()]]++);
-    // Aggregate numeric fields from structuredData if they exist (e.g., intensity or mood_score)
+    entries.forEach(e => {
+      const day = format(new Date(e.date), 'eee');
+      if (frequency[day] !== undefined) frequency[day]++;
+    });
     const moodTrends = entries.slice(0, 10).map(e => ({
       date: format(new Date(e.date), 'MM-dd'),
       score: Number(e.structuredData?.mood_score || e.structuredData?.intensity || 3)

@@ -35,6 +35,7 @@ export class JournalEntity extends IndexedEntity<Journal> {
   static readonly initialState: Journal = {
     id: "",
     userId: "",
+    templateId: "reflective",
     title: "",
     description: "",
     type: "reflective",
