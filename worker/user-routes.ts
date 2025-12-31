@@ -68,7 +68,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const inst = new LegacyShareEntity(c.env, shareId);
     if (!(await inst.exists())) return notFound(c);
     const share = await inst.getState();
-    const hash = await hashPassword(password, "legacy-salt"); 
+    const hash = await hashPassword(password, "legacy-salt");
     if (hash !== share.passwordHash) return bad(c, 'Incorrect password');
     const data = {
       journalTitle: "Verified Journal",
@@ -90,17 +90,28 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const userId = crypto.randomUUID();
     const now = new Date().toISOString();
     const userAuth = await UserAuthEntity.create(c.env, {
-      id: body.email.toLowerCase(), passwordHash: hash, salt,
+      id: body.email.toLowerCase(), 
+      passwordHash: hash, 
+      salt,
       profile: {
-        id: userId, name: body.name, email: body.email.toLowerCase(),
+        id: userId, 
+        name: body.name, 
+        email: body.email.toLowerCase(),
         preferences: {
-          theme: 'system', notificationsEnabled: true, language: 'en', onboardingCompleted: false,
+          theme: 'system', 
+          notificationsEnabled: true, 
+          language: 'en', 
+          onboardingCompleted: false,
+          e2eEnabled: false,
+          analyticsOptIn: true,
+          privacyLevel: 'standard',
           notificationSettings: {
             entry: true, prompt: true, affirmation: true, share: true, access: true, insight: true, export: true, reminder: true, limit: true, activity: true
           },
           quietHours: { start: "22:00", end: "08:00", enabled: false }
         },
-        createdAt: now, lastHeartbeatAt: now
+        createdAt: now, 
+        lastHeartbeatAt: now
       }
     });
     const token = await sign({ userId, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
@@ -119,7 +130,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   // Protected Routes Middleware
   app.use('/api/*', jwt({ secret: JWT_SECRET }));
-  
   // Security Auditor Middleware
   app.use('/api/*', async (c, next) => {
     const method = c.req.method;
@@ -129,7 +139,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         await SecurityLogEntity.create(c.env, {
           id: crypto.randomUUID(),
           userId: payload.userId,
-          event: method === 'DELETE' ? 'purge' : 'e2e_enabled', // Generic categorizing
+          event: method === 'DELETE' ? 'purge' : 'e2e_enabled', 
           ip: c.req.header('cf-connecting-ip') || '0.0.0.0',
           userAgent: c.req.header('user-agent') || 'unknown',
           timestamp: new Date().toISOString()
@@ -138,7 +148,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     }
     await next();
   });
-
   app.get('/api/users/me/export-all', async (c) => {
     const payload = c.get('jwtPayload');
     const [journals, entries, contacts, searches] = await Promise.all([
@@ -149,7 +158,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     ]);
     return ok(c, { journals, entries, contacts, searches, exportedAt: new Date().toISOString() });
   });
-
   app.get('/api/auth/me', async (c) => {
     const payload = c.get('jwtPayload');
     const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
@@ -261,7 +269,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   app.get('/api/journals/:id/entries', async (c) => {
     const payload = c.get('jwtPayload');
-    return ok(c, await EntryEntity.listByJournal(c.env, c.req.param('id'), payload.userId));
+    return ok(c, await EntryEntity.listByJournal(c.req.param('id'), payload.userId));
   });
   app.post('/api/journals/:id/entries', async (c) => {
     const payload = c.get('jwtPayload');

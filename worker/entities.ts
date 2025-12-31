@@ -110,6 +110,7 @@ export class JournalEntity extends IndexedEntity<Journal> {
     title: "",
     description: "",
     type: "reflective",
+    isEncrypted: false,
     createdAt: "",
   };
   static async listByUser(env: Env, userId: string): Promise<Journal[]> {

@@ -5,13 +5,12 @@ import type { LegacyPublicData, Journal } from '@shared/types';
 import { generateJournalPdf } from '@/lib/pdf-export';
 import {
   Loader2, Download, Sparkles, Calendar, Lock,
-  ArrowRight, ShieldAlert, Book, Info, AlertCircle
+  ShieldAlert
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 export function LegacyView() {
   const { shareId } = useParams();
@@ -66,6 +65,8 @@ export function LegacyView() {
         title: data.journalTitle,
         description: `Legacy archive from ${data.authorName}`,
         type: 'reflective',
+        isEncrypted: false,
+        encryptionVersion: 1,
         createdAt: new Date().toISOString()
       };
       const doc = await generateJournalPdf(dummyJournal, data.entries, {
@@ -73,6 +74,7 @@ export function LegacyView() {
         author: data.authorName,
         includeImages: true,
         includeTags: true,
+        highContrast: false,
         customMessage: "This archive was shared through the Lumina Legacy Transmission Moat."
       });
       doc.save(`${data.journalTitle.toLowerCase().replace(/\s+/g, '-')}-shared.pdf`);

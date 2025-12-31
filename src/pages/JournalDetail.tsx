@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, Send, Sparkles, Loader2, Download, Star, Book, Maximize2, Minimize2, Type, X, Shield, Lock } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { format, isThisWeek, isThisMonth } from 'date-fns';
@@ -36,7 +37,6 @@ export function JournalDetail() {
   const [exportOpen, setExportOpen] = useState(false);
   const [contextualSuggestion, setContextualSuggestion] = useState<DailyContent | null>(null);
   const [isGettingSuggestion, setIsGettingSuggestion] = useState(false);
-  // Draft initialization: only run when journal ID changes
   useEffect(() => {
     if (id) {
       const d = drafts[id];
@@ -52,9 +52,8 @@ export function JournalDetail() {
       fetchEntries(id);
     }
   }, [id, fetchEntries, drafts]);
-  // Autosave Logic (Debounced)
   useEffect(() => {
-    if (!id || !title && Object.keys(formData).length === 0) return;
+    if (!id || (!title && Object.keys(formData).length === 0)) return;
     const timer = setTimeout(() => {
       setDraft(id, {
         title,
@@ -84,7 +83,7 @@ export function JournalDetail() {
       structuredData: formData,
       tags,
       wordCount,
-      mood: formData.mood_score || formData.intensity || 'Normal'
+      mood: String(formData.mood_score || formData.intensity || 'Normal')
     });
     setFormData({});
     setTitle('');
@@ -132,7 +131,9 @@ export function JournalDetail() {
                 </div>
                 <h1 className="text-4xl font-serif font-medium text-stone-900">{journal.title}</h1>
                 {journal.isEncrypted && (
-                  <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-100 gap-1.5 ml-2"><Lock size={10} /> Secured</Badge>
+                  <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-100 gap-1.5 ml-2">
+                    <Lock size={10} /> Secured
+                  </Badge>
                 )}
               </div>
             </div>
