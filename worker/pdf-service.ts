@@ -1,5 +1,4 @@
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
 import { format } from 'date-fns';
 import type { Journal, Entry, ExportOptions } from '@shared/types';
 /**

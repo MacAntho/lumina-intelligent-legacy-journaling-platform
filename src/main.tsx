@@ -65,7 +65,13 @@ const router = createBrowserRouter([
   { path: "/pricing", element: <AuthGuard><PricingPage /></AuthGuard>, errorElement: <RouteErrorBoundary /> },
   { path: "/shared/:shareId", element: <LegacyView />, errorElement: <RouteErrorBoundary /> },
 ]);
-createRoot(document.getElementById('root')!).render(
+const container = document.getElementById('root')!;
+let root = (window as any).__ROOT__;
+if (!root) {
+  root = createRoot(container);
+  (window as any).__ROOT__ = root;
+}
+root.render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
