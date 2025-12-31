@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, SlidersHorizontal, History, Bookmark, Calendar, Sparkles, Loader2 } from 'lucide-react';
+import { Search, SlidersHorizontal, History, Bookmark, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -43,43 +43,25 @@ export function AdvancedSearch<T extends Record<string, any>>({
       });
       if (!matchesText) return false;
       if (context === 'journal') {
-        const itemMood = item.mood;
-        if (filters.moods?.length && itemMood && !filters.moods.includes(itemMood)) return false;
-        const score = item.structuredData?.mood_score || item.structuredData?.intensity || 0;
+        const itemMood = String(item.mood || item.structuredData?.mood_score || '');
+        if (filters.moods?.length && !filters.moods.some(m => itemMood.includes(m))) return false;
+        const score = Number(item.structuredData?.mood_score || item.structuredData?.intensity || 0);
         if (filters.minStars && score < filters.minStars) return false;
-        if (filters.hasImages && (!item.images || item.images.length === 0)) return false;
-        if (filters.minWordCount && (item.wordCount || 0) < filters.minWordCount) return false;
-        if (filters.tags?.length) {
-          const itemTags = item.tags || [];
-          if (!filters.tags.some((t: string) => itemTags.includes(t))) return false;
-        }
-      }
-      if (filters.dateRange) {
-        const dateVal = item.date || item.createdAt;
-        if (dateVal) {
-          const itemTime = new Date(dateVal).getTime();
-          if (filters.dateRange.start) {
-            const startTime = new Date(filters.dateRange.start).getTime();
-            if (itemTime < startTime) return false;
-          }
-          if (filters.dateRange.end) {
-            const endTime = new Date(filters.dateRange.end).getTime();
-            if (itemTime > endTime) return false;
-          }
-        }
+        const itemTags = item.tags || [];
+        if (filters.tags?.length && !filters.tags.some((t: string) => itemTags.includes(t))) return false;
       }
       return true;
     });
   }, [items, query, filters, searchFields, context]);
-  const debouncedResults = useCallback(() => {
+  const handleRefinement = useCallback(() => {
     onResults(filteredItems);
     setIsRefining(false);
   }, [filteredItems, onResults]);
   useEffect(() => {
     setIsRefining(true);
-    const timer = setTimeout(debouncedResults, 150);
+    const timer = setTimeout(handleRefinement, 200);
     return () => clearTimeout(timer);
-  }, [debouncedResults]);
+  }, [handleRefinement]);
   const handleSaveCurrent = () => {
     const name = query || `Search ${dateFnsFormat(new Date(), 'HH:mm')}`;
     saveSearch({ name, query, filters });
@@ -88,11 +70,10 @@ export function AdvancedSearch<T extends Record<string, any>>({
   const suggestions = useMemo(() => {
     if (!query) return [];
     const q = query.toLowerCase();
-    const matches = [
-      ...searchSuggestions.titles.filter(t => t.toLowerCase().includes(q)).map(t => ({ text: t, type: 'title' })),
-      ...searchSuggestions.tags.filter(t => t.toLowerCase().includes(q)).map(t => ({ text: t, type: 'tag' }))
-    ];
-    return matches.slice(0, 5);
+    return [
+      ...searchSuggestions.titles.filter(t => t.toLowerCase().includes(q)),
+      ...searchSuggestions.tags.filter(t => t.toLowerCase().includes(q))
+    ].slice(0, 5);
   }, [query, searchSuggestions]);
   return (
     <div className="w-full space-y-4">
@@ -115,34 +96,25 @@ export function AdvancedSearch<T extends Record<string, any>>({
             className="pl-11 pr-4 py-6 rounded-2xl border-stone-200 bg-white/50 backdrop-blur-sm focus-visible:ring-stone-200 text-lg font-serif"
           />
           <AnimatePresence>
-            {isDropdownOpen && (recentSearches.length > 0 || savedSearches.length > 0 || suggestions.length > 0) && (
+            {isDropdownOpen && (recentSearches.length > 0 || suggestions.length > 0) && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
                 className="absolute top-full left-0 right-0 mt-3 bg-white border border-stone-100 rounded-3xl shadow-2xl z-50 overflow-hidden"
               >
-                {suggestions.length > 0 && (
-                  <div className="p-3 border-b border-stone-50">
-                    {suggestions.map((s, idx) => (
-                      <button key={idx} onClick={() => setQuery(s.text)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-stone-50 text-sm">
-                        <Sparkles size={14} className="text-amber-400" />
-                        <span className="flex-1 text-left font-serif">{s.text}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {recentSearches.length > 0 && (
-                  <div className="p-3">
-                    <p className="px-3 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Recent Activity</p>
-                    {recentSearches.map(q => (
-                      <button key={q} onClick={() => setQuery(q)} className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl hover:bg-stone-50 text-sm">
-                        <History size={14} className="text-stone-300" />
-                        <span className="flex-1 text-left text-stone-600">{q}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {suggestions.map((s, idx) => (
+                  <button key={idx} onClick={() => setQuery(s)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-stone-50 text-sm">
+                    <Sparkles size={14} className="text-amber-400" />
+                    <span className="flex-1 text-left font-serif">{s}</span>
+                  </button>
+                ))}
+                {recentSearches.map(q => (
+                  <button key={q} onClick={() => setQuery(q)} className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl hover:bg-stone-50 text-sm">
+                    <History size={14} className="text-stone-300" />
+                    <span className="flex-1 text-left text-stone-600">{q}</span>
+                  </button>
+                ))}
               </motion.div>
             )}
           </AnimatePresence>
@@ -163,7 +135,7 @@ export function AdvancedSearch<T extends Record<string, any>>({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="bg-stone-50 border border-stone-200 rounded-4xl p-8 grid grid-cols-1 md:grid-cols-3 gap-10">
+            <div className="bg-stone-50 border border-stone-200 rounded-4xl p-8 grid grid-cols-1 md:grid-cols-2 gap-10">
               <div className="space-y-4">
                 <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Emotional Filters</Label>
                 <div className="flex flex-wrap gap-2">

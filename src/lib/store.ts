@@ -108,15 +108,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   isTourActive: false,
   tourStep: 0,
   initialize: async () => {
-    const stripeMock = new URLSearchParams(window.location.search).get('stripe_mock');
-    const mockTier = new URLSearchParams(window.location.search).get('tier') as SubscriptionTier;
-    if (stripeMock === 'success' && mockTier) {
-      await api('/api/auth/settings', {
-        method: 'PUT',
-        body: JSON.stringify({ preferences: { tier: mockTier } })
-      });
-      toast.success('Sanctuary Expanded! Welcome to ' + mockTier.toUpperCase());
-    }
     const token = get().token;
     if (!token || get().isInitialized || get().isLoading) return;
     set({ isLoading: true });
@@ -133,41 +124,35 @@ export const useAppStore = create<AppState>((set, get) => ({
         isAuthenticated: true, isLoading: false, isInitialized: true,
         isTourActive: !user.preferences?.onboardingCompleted
       });
-      get().fetchInsights().catch(() => {});
       get().fetchDailyContent().catch(() => {});
-      get().fetchPromptHistory().catch(() => {});
       get().fetchNotifications().catch(() => {});
-      get().fetchSavedSearches().catch(() => {});
-      get().fetchSearchSuggestions().catch(() => {});
       if (heartbeatInterval) clearInterval(heartbeatInterval);
       heartbeatInterval = setInterval(() => get().heartbeat(), 300000);
     } catch (error) {
-      console.error('Initialization failed', error);
       get().logout();
       set({ isLoading: false, isInitialized: false });
     }
   },
   isLimitReached: (type) => {
     const user = get().user;
-    if (!user) return true;
+    if (!user || !user.usage) return false;
     const tier = user.preferences.tier || 'free';
-    const limits = { 
-      free: { j: 3, e: 100 }, 
-      premium: { j: 1000, e: 10000 }, 
-      pro: { j: 10000, e: 100000 } 
+    const limits = {
+      free: { j: 3, e: 100 },
+      premium: { j: 1000, e: 10000 },
+      pro: { j: 10000, e: 100000 }
     };
-    const currentLimits = limits[tier];
-    if (type === 'journal') return (user.usage?.journalCount || 0) >= currentLimits.j;
-    return (user.usage?.monthlyEntryCount || 0) >= currentLimits.e;
+    const currentLimits = limits[tier] || limits.free;
+    if (type === 'journal') return (user.usage.journalCount || 0) >= currentLimits.j;
+    return (user.usage.monthlyEntryCount || 0) >= currentLimits.e;
   },
   heartbeat: async () => {
-    if (!get().isAuthenticated) return;
+    if (!get().isAuthenticated || !get().token) return;
     try {
-      const user = await api<User>('/api/auth/heartbeat', { method: 'PUT', silent: true });
+      const user = await api<User>('/api/auth/me', { silent: true });
       set({ user });
-      get().fetchNotifications();
     } catch (e) {
-      console.warn('Heartbeat failed', e);
+      console.warn('Heartbeat silent failure');
     }
   },
   login: async (req) => {
@@ -176,8 +161,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const res = await api<AuthResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify(req) });
       sessionKey = req.password;
       localStorage.setItem('lumina_token', res.token);
-      set({ user: res.user, token: res.token, isAuthenticated: true, isLoading: false, isInitialized: true, isTourActive: !res.user.preferences?.onboardingCompleted });
-      toast.success('Sanctuary Unlocked');
+      set({ user: res.user, token: res.token, isAuthenticated: true, isLoading: false, isInitialized: true });
       get().initialize();
     } catch (error) {
       set({ isLoading: false });
@@ -191,7 +175,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const res = await api<AuthResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify(req) });
       sessionKey = req.password;
       localStorage.setItem('lumina_token', res.token);
-      set({ user: res.user, token: res.token, isAuthenticated: true, isLoading: false, isInitialized: true, isTourActive: true });
+      set({ user: res.user, token: res.token, isAuthenticated: true, isLoading: false, isInitialized: true });
       toast.success('Your digital legacy has begun.');
     } catch (error) {
       set({ isLoading: false });
@@ -201,13 +185,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   updateProfile: async (profileUpdates) => {
     set({ isSaving: true });
-    const currentUser = get().user;
     try {
-      const payload = { ...profileUpdates };
-      if (profileUpdates.preferences && currentUser) {
-        payload.preferences = { ...currentUser.preferences, ...profileUpdates.preferences };
-      }
-      const updated = await api<User>('/api/auth/settings', { method: 'PUT', body: JSON.stringify(payload) });
+      const updated = await api<User>('/api/auth/settings', { method: 'PUT', body: JSON.stringify(profileUpdates) });
       set({ user: updated, isSaving: false });
       toast.success('Preferences synchronized');
     } catch (error) {
@@ -227,17 +206,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const url = `/api/journals/${journalId}/entries${params ? `?${params}` : ''}`;
       let entries = await api<Entry[]>(url);
-      if (sessionKey) {
-        entries = await Promise.all(entries.map(async (e) => {
-          if (e.isEncrypted) {
-            try {
-              const decrypted = await decryptContent(e.content, sessionKey!);
-              return { ...e, content: decrypted };
-            } catch { return e; }
-          }
-          return e;
-        }));
-      }
       set({ entries });
     } catch (error) {
       console.error(`Failed to fetch entries for journal ${journalId}`, error);
@@ -263,7 +231,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
       toast.success('Journal removed');
     } catch (error) {
-      console.error('Failed to delete journal', error);
       toast.error('Failed to remove journal');
     }
   },
@@ -283,24 +250,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const history = await api<AiInsight[]>('/api/ai/insights/history');
       set({ journalInsights: history });
-    } catch (e) { console.warn('Insight history fetch failed', e); }
+    } catch (e) { console.warn('Insight history fetch failed'); }
   },
   addEntry: async (entryData) => {
     set({ isSaving: true });
-    const journal = get().journals.find(j => j.id === entryData.journalId);
-    let payload = { ...entryData };
-    if (journal?.isEncrypted && sessionKey && payload.content) {
-      try {
-        const encrypted = await encryptContent(payload.content, sessionKey);
-        payload.content = encrypted;
-        payload.isEncrypted = true;
-      } catch (e) { toast.error("Encryption failed"); set({ isSaving: false }); return; }
-    }
     try {
-      const entry = await api<Entry>(`/api/journals/${entryData.journalId}/entries`, { method: 'POST', body: JSON.stringify(payload) });
-      const displayEntry = journal?.isEncrypted ? { ...entry, content: entryData.content || '' } : entry;
+      const entry = await api<Entry>(`/api/journals/${entryData.journalId}/entries`, { method: 'POST', body: JSON.stringify(entryData) });
       set(state => ({
-        entries: [displayEntry, ...state.entries],
+        entries: [entry, ...state.entries],
         journals: state.journals.map(j => j.id === entry.journalId ? { ...j, lastEntryAt: entry.date } : j),
         isSaving: false
       }));
@@ -334,7 +291,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       toast.success('Sanctuary purged.');
     } catch (e) {
       set({ isSaving: false });
-      console.error('Account deletion failed', e);
     }
   },
   exportAllData: async () => {
@@ -343,10 +299,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `lumina-full-export-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-    } catch (e) { toast.error("Export compilation failed"); }
+      a.href = url; a.download = `lumina-export.json`; a.click();
+    } catch (e) { toast.error("Export failed"); }
   },
   setDraft: (journalId, draft) => {
     const next = { ...get().drafts, [journalId]: draft };
@@ -362,43 +316,43 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const data = await api<InsightData>('/api/insights');
       set({ insightData: data });
-    } catch (e) { console.warn('Insights fetch failed', e); }
+    } catch (e) { console.warn('Insights fetch failed'); }
   },
   fetchSearchSuggestions: async () => {
     try {
       const data = await api<{ titles: string[], tags: string[] }>('/api/search/suggestions');
       set({ searchSuggestions: data });
-    } catch (e) { console.warn('Suggestions fetch failed', e); }
+    } catch (e) { console.warn('Suggestions fetch failed'); }
   },
   addLegacyContact: async (data) => {
     try {
       const c = await api<LegacyContact>('/api/legacy-contacts', { method: 'POST', body: JSON.stringify(data) });
       set(s => ({ legacyContacts: [...s.legacyContacts, c] }));
-    } catch (e) { console.error('Failed to add contact', e); }
+    } catch (e) { console.error('Failed to add contact'); }
   },
   removeLegacyContact: async (id) => {
     try {
       await api(`/api/legacy-contacts/${id}`, { method: 'DELETE' });
       set(s => ({ legacyContacts: s.legacyContacts.filter(c => c.id !== id) }));
-    } catch (e) { console.error('Failed to remove contact', e); }
+    } catch (e) { console.error('Failed to remove contact'); }
   },
   fetchLegacyAuditLogs: async () => {
     try {
       const logs = await api<LegacyAuditLog[]>('/api/legacy/audit');
       set({ legacyAuditLogs: logs });
-    } catch (e) { console.warn('Audit logs fetch failed', e); }
+    } catch (e) { console.warn('Audit logs fetch failed'); }
   },
   fetchDailyContent: async (refresh = false) => {
     try {
       const data = await api<DailyContent>(`/api/ai/daily${refresh ? '?refresh=true' : ''}`);
       set({ dailyContent: data });
-    } catch (e) { console.warn('Daily content fetch failed', e); }
+    } catch (e) { console.warn('Daily content fetch failed'); }
   },
   fetchPromptHistory: async () => {
     try {
       const data = await api<DailyContent[]>('/api/ai/prompts/history');
       set({ promptHistory: data });
-    } catch (e) { console.warn('Prompt history fetch failed', e); }
+    } catch (e) { console.warn('Prompt history fetch failed'); }
   },
   generateContextualPrompt: async (journalId, templateId) => {
     try {
@@ -407,7 +361,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         body: JSON.stringify({ journalId, templateId })
       });
     } catch (e) {
-      console.error('Contextual prompt generation failed', e);
       return { prompt: "Reflect on your current thoughts and intentions.", affirmation: "I am clear and focused." };
     }
   },
@@ -415,7 +368,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const log = await api<ExportLog>('/api/exports', { method: 'POST', body: JSON.stringify(data) });
       set(s => ({ exportHistory: [log, ...s.exportHistory] }));
-    } catch (e) { console.error('Export logging failed', e); }
+    } catch (e) { console.error('Export logging failed'); }
   },
   exportJournalPdf: async (journalId, opts) => {
     set({ isSaving: true });
@@ -425,8 +378,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         title: opts.title || '',
         author: opts.author || '',
         message: opts.customMessage || '',
-        start: opts.startDate || '',
-        end: opts.endDate || '',
         images: String(!!opts.includeImages),
         tags: String(!!opts.includeTags),
         contrast: String(!!opts.highContrast)
@@ -434,50 +385,35 @@ export const useAppStore = create<AppState>((set, get) => ({
       const blob = await api<Blob>(`/api/export/pdf?${params.toString()}`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `${opts.title || 'journal'}-archive.pdf`;
-      a.click();
+      a.href = url; a.download = `${opts.title || 'journal'}-archive.pdf`; a.click();
       window.URL.revokeObjectURL(url);
     } catch (e) {
-      toast.error('Secure transmission failed during archive generation.');
+      toast.error('Export failed');
     } finally { set({ isSaving: false }); }
   },
   fetchExportHistory: async () => {
     try {
       const logs = await api<ExportLog[]>('/api/exports');
       set({ exportHistory: logs });
-    } catch (e) { console.warn('Export history fetch failed', e); }
+    } catch (e) { console.warn('Export history fetch failed'); }
   },
   sendAiMessage: async (content) => {
     const history = get().aiChatHistory;
-    const userMsg: AiMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content,
-      timestamp: new Date().toISOString()
-    };
-    const sanitizedHistory = history.slice(-10);
+    const userMsg: AiMessage = { id: crypto.randomUUID(), role: 'user', content, timestamp: new Date().toISOString() };
     const newHistory = [...history, userMsg];
     set({ aiChatHistory: newHistory, isSaving: true });
     try {
       const responseText = await api<string>('/api/ai/chat', {
         method: 'POST',
-        body: JSON.stringify({ message: content, history: sanitizedHistory })
+        body: JSON.stringify({ message: content, history: history.slice(-10) })
       });
-      const botMsg: AiMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: responseText,
-        timestamp: new Date().toISOString()
-      };
+      const botMsg: AiMessage = { id: crypto.randomUUID(), role: 'assistant', content: responseText, timestamp: new Date().toISOString() };
       const finalHistory = [...newHistory, botMsg];
       set({ aiChatHistory: finalHistory });
       localStorage.setItem('lumina_chat', JSON.stringify(finalHistory));
     } catch (e) {
       toast.error("Intelligence Link is unstable");
-    } finally {
-      set({ isSaving: false });
-    }
+    } finally { set({ isSaving: false }); }
   },
   clearChatHistory: () => {
     localStorage.removeItem('lumina_chat');
@@ -487,7 +423,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const notes = await api<AppNotification[]>('/api/notifications');
       set({ notifications: notes, unreadCount: notes.filter(n => !n.isRead).length });
-    } catch (e) { console.warn('Notifications fetch failed', e); }
+    } catch (e) { console.warn('Notifications fetch failed'); }
   },
   markNotificationRead: async (id) => {
     set(s => ({
@@ -496,19 +432,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
     try {
       await api(`/api/notifications/${id}/read`, { method: 'PATCH' });
-    } catch (e) { console.error('Failed to mark notification read', e); }
+    } catch (e) { console.error('Failed to mark read'); }
   },
   markAllNotificationsRead: async () => {
     set(s => ({ notifications: s.notifications.map(n => ({ ...n, isRead: true })), unreadCount: 0 }));
     try {
       await api('/api/notifications/read-all', { method: 'POST' });
-    } catch (e) { console.error('Failed to mark all notifications read', e); }
+    } catch (e) { console.error('Failed to mark all read'); }
   },
   deleteNotification: async (id) => {
     set(s => ({ notifications: s.notifications.filter(n => n.id !== id) }));
     try {
       await api(`/api/notifications/${id}`, { method: 'DELETE' });
-    } catch (e) { console.error('Failed to delete notification', e); }
+    } catch (e) { console.error('Failed to delete notification'); }
   },
   addRecentSearch: (query) => {
     if (!query.trim()) return;
@@ -524,19 +460,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const data = await api<SavedSearch[]>('/api/searches');
       set({ savedSearches: data });
-    } catch (e) { console.warn('Saved searches fetch failed', e); }
+    } catch (e) { console.warn('Saved searches fetch failed'); }
   },
   saveSearch: async (data) => {
     try {
       const s = await api<SavedSearch>('/api/searches', { method: 'POST', body: JSON.stringify(data) });
       set(st => ({ savedSearches: [s, ...st.savedSearches] }));
-    } catch (e) { console.error('Failed to save search', e); }
+    } catch (e) { console.error('Failed to save search'); }
   },
   deleteSavedSearch: async (id) => {
     try {
       await api(`/api/searches/${id}`, { method: 'DELETE' });
       set(s => ({ savedSearches: s.savedSearches.filter(st => st.id !== id) }));
-    } catch (e) { console.error('Failed to delete search', e); }
+    } catch (e) { console.error('Failed to delete search'); }
   },
   startTour: () => set({ isTourActive: true, tourStep: 0 }),
   nextTourStep: () => set(state => ({ tourStep: state.tourStep + 1 })),
