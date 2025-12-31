@@ -1,0 +1,40 @@
+@media print {
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+  /* Hide UI elements */
+  nav, 
+  aside, 
+  header .print\:hidden,
+  .print\:hidden,
+  button,
+  [role="dialog"],
+  .sidebar-trigger {
+    display: none !important;
+  }
+  /* Reset layout for paper */
+  .max-w-7xl, .max-w-4xl {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .AppLayout, .SidebarInset {
+    background: transparent !important;
+    padding: 0 !important;
+  }
+  /* Entry Formatting */
+  p.font-serif {
+    font-size: 12pt !important;
+    line-height: 1.6 !important;
+    color: black !important;
+  }
+  h1, h2, h3 {
+    color: black !important;
+  }
+  /* Page breaks */
+  .motion-div {
+    break-inside: avoid;
+    margin-bottom: 2cm !important;
+  }
+}

@@ -77,14 +77,7 @@ function updateWranglerJsonc() {
 }
 
 function runSetupCommands() {
-    const commands = [
-    "bun add jspdf jspdf-autotable date-fns lucide-react@latest",
-    "bun add bcryptjs",
-    "bun add lucide-react@latest",
-    "bun add fuse.js",
-    "bun add date-fns lucide-react@latest",
-    "bun add crypto-js"
-];
+    const commands = [];
     
     if (commands.length === 0) {
         console.log('⊘ No setup commands to run');
