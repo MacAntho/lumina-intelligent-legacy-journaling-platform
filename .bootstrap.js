@@ -80,7 +80,8 @@ function runSetupCommands() {
     const commands = [
     "bun add jspdf jspdf-autotable",
     "bun add bcryptjs",
-    "bun add lucide-react@latest"
+    "bun add lucide-react@latest",
+    "bun add fuse.js"
 ];
     
     if (commands.length === 0) {
