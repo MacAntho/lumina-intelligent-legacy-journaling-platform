@@ -1,5 +1,5 @@
 import { IndexedEntity, Env } from "./core-utils";
-import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog, LegacyAuditLog, AppNotification, SavedSearch } from "@shared/types";
+import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog, LegacyAuditLog, AppNotification, SavedSearch, DailyContent } from "@shared/types";
 export interface UserAuthData {
   id: string; // email
   passwordHash: string;
@@ -7,6 +7,12 @@ export interface UserAuthData {
   profile: User;
   resetToken?: string;
   resetExpires?: string;
+}
+export interface PromptRecord extends DailyContent {
+  id: string;
+  userId: string;
+  type: 'daily' | 'contextual';
+  createdAt: string;
 }
 export class UserAuthEntity extends IndexedEntity<UserAuthData> {
   static readonly entityName = "user-auth";
@@ -41,7 +47,6 @@ export class UserAuthEntity extends IndexedEntity<UserAuthData> {
     return null;
   }
   static async purgeAllUserData(env: Env, userId: string, email: string) {
-    // Cascading deletion across all entities
     await JournalEntity.deleteManyByUser(env, userId);
     await EntryEntity.deleteManyByUser(env, userId);
     await LegacyContactEntity.deleteManyByUser(env, userId);
@@ -49,8 +54,28 @@ export class UserAuthEntity extends IndexedEntity<UserAuthData> {
     await LegacyAuditLogEntity.deleteManyByUser(env, userId);
     await NotificationEntity.deleteManyByUser(env, userId);
     await SavedSearchEntity.deleteManyByUser(env, userId);
-    // Finally delete the auth record
+    await PromptEntity.deleteManyByUser(env, userId);
     await UserAuthEntity.delete(env, email.toLowerCase());
+  }
+}
+export class PromptEntity extends IndexedEntity<PromptRecord> {
+  static readonly entityName = "prompt";
+  static readonly indexName = "prompts";
+  static readonly initialState: PromptRecord = {
+    id: "",
+    userId: "",
+    prompt: "",
+    affirmation: "",
+    type: "daily",
+    createdAt: ""
+  };
+  static async listByUser(env: Env, userId: string): Promise<PromptRecord[]> {
+    const { items } = await this.list(env, null, 100);
+    return items.filter(p => p.userId === userId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  static async deleteManyByUser(env: Env, userId: string) {
+    const items = await this.listByUser(env, userId);
+    if (items.length > 0) await this.deleteMany(env, items.map(i => i.id));
   }
 }
 export class JournalEntity extends IndexedEntity<Journal> {
@@ -100,6 +125,14 @@ export class EntryEntity extends IndexedEntity<Entry> {
   static async listByUser(env: Env, userId: string): Promise<Entry[]> {
     const { items } = await this.list(env, null, 1000);
     return items.filter(e => e.userId === userId);
+  }
+  static async getRecentEntriesContent(env: Env, userId: string, days: number = 7): Promise<string> {
+    const entries = await this.listByUser(env, userId);
+    const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
+    return entries
+      .filter(e => new Date(e.date).getTime() > cutoff)
+      .map(e => e.content)
+      .join("\n\n");
   }
   static async deleteManyByUser(env: Env, userId: string) {
     const entries = await this.listByUser(env, userId);

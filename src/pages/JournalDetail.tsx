@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronLeft, Send, Sparkles, Calendar, Loader2, Download, Star, Book, Mic, Eye, PenLine, Maximize2, Minimize2, Type } from 'lucide-react';
+import { ChevronLeft, Send, Sparkles, Calendar, Loader2, Download, Star, Book, Mic, Eye, PenLine, Maximize2, Minimize2, Type, X } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { format, isThisWeek, isThisMonth } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,7 +17,7 @@ import { JOURNAL_TEMPLATES } from '@shared/templates';
 import { ExportDialog } from '@/components/ExportDialog';
 import { AdvancedSearch } from '@/components/AdvancedSearch';
 import { cn } from '@/lib/utils';
-import type { Entry } from '@shared/types';
+import type { Entry, DailyContent } from '@shared/types';
 export function JournalDetail() {
   const { id } = useParams();
   const journals = useAppStore(s => s.journals);
@@ -27,16 +27,17 @@ export function JournalDetail() {
   const setDraft = useAppStore(s => s.setDraft);
   const isSaving = useAppStore(s => s.isSaving);
   const fetchEntries = useAppStore(s => s.fetchEntries);
+  const generateContextualPrompt = useAppStore(s => s.generateContextualPrompt);
   const journal = journals.find(j => j.id === id);
   const template = JOURNAL_TEMPLATES.find(t => t.id === journal?.templateId) || JOURNAL_TEMPLATES[0];
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [title, setTitle] = useState('');
   const [tags, setTags] = useState<string[]>([]);
-  const [isRecording, setIsRecording] = useState(false);
-  const [previewMode, setPreviewMode] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [filteredEntries, setFilteredEntries] = useState<Entry[]>([]);
   const [exportOpen, setExportOpen] = useState(false);
+  const [contextualSuggestion, setContextualSuggestion] = useState<DailyContent | null>(null);
+  const [isGettingSuggestion, setIsGettingSuggestion] = useState(false);
   useEffect(() => {
     if (id && drafts[id]) {
       const d = drafts[id];
@@ -70,15 +71,19 @@ export function JournalDetail() {
     });
     setFormData({});
     setTitle('');
+    setContextualSuggestion(null);
     toast.success('Preserved in the archive.');
   };
-  const onSearchResults = useCallback((results: Entry[]) => {
-    setFilteredEntries(results);
-  }, []);
+  const handleGetSuggestion = async () => {
+    if (!id) return;
+    setIsGettingSuggestion(true);
+    const suggestion = await generateContextualPrompt(id, template.id);
+    setContextualSuggestion(suggestion);
+    setIsGettingSuggestion(false);
+  };
+  const onSearchResults = useCallback((results: Entry[]) => setFilteredEntries(results), []);
   const groupedEntries = useMemo(() => {
-    const thisWeek: Entry[] = [];
-    const thisMonth: Entry[] = [];
-    const older: Entry[] = [];
+    const thisWeek: Entry[] = [], thisMonth: Entry[] = [], older: Entry[] = [];
     filteredEntries.forEach(entry => {
       const date = new Date(entry.date);
       if (isThisWeek(date)) thisWeek.push(entry);
@@ -122,33 +127,59 @@ export function JournalDetail() {
           </div>
         </header>
         <section className="bg-white rounded-4xl border border-stone-200 p-10 shadow-sm mb-20 relative">
+          <AnimatePresence>
+            {contextualSuggestion && (
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className={cn("mb-8 p-6 rounded-2xl border-l-4 bg-stone-50 relative", `border-${template.color}-500`)}
+              >
+                <button onClick={() => setContextualSuggestion(null)} className="absolute top-4 right-4 text-stone-300 hover:text-stone-600">
+                  <X size={14} />
+                </button>
+                <div className="flex items-center gap-2 text-amber-600 mb-2">
+                  <Sparkles size={14} />
+                  <span className="text-[10px] font-bold uppercase tracking-widest">Lumina Suggestion</span>
+                </div>
+                <p className="text-stone-800 font-serif italic text-lg leading-relaxed">"{contextualSuggestion.prompt}"</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div className="absolute top-6 right-10 flex items-center gap-3 text-stone-300">
             <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-widest">
               <Type size={12} /> {wordCount} Words
             </div>
           </div>
           <div className="space-y-8">
-            <Input 
-              placeholder="Give this reflection a title..." 
+            <Input
+              placeholder="Give this reflection a title..."
               className="border-none text-3xl font-serif p-0 focus-visible:ring-0 placeholder:text-stone-100 h-auto"
-              value={title} 
-              onChange={(e) => setTitle(e.target.value)} 
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
             />
             {template.fields.map((field) => (
               <div key={field.id} className="space-y-3">
-                <Label className="text-xs font-bold uppercase tracking-widest text-stone-400">{field.label}</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold uppercase tracking-widest text-stone-400">{field.label}</Label>
+                  {field.type === 'textarea' && (
+                    <Button variant="ghost" size="sm" onClick={handleGetSuggestion} disabled={isGettingSuggestion} className="h-6 text-[10px] uppercase tracking-widest font-bold text-stone-300 hover:text-amber-600 gap-1.5">
+                      {isGettingSuggestion ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Get Guidance
+                    </Button>
+                  )}
+                </div>
                 {field.type === 'textarea' ? (
-                  <Textarea 
-                    placeholder={field.placeholder} 
+                  <Textarea
+                    placeholder={field.placeholder}
                     className="rounded-2xl border-stone-100 bg-stone-50/30 min-h-[160px] text-lg font-serif p-6"
-                    value={formData[field.id] || ''} 
+                    value={formData[field.id] || ''}
                     onChange={(e) => setFormData(p => ({ ...p, [field.id]: e.target.value }))}
                   />
                 ) : field.type === 'rating' ? (
                   <div className="flex gap-3">
                     {[1, 2, 3, 4, 5].map((num) => (
-                      <button 
-                        key={num} 
+                      <button
+                        key={num}
                         onClick={() => setFormData(p => ({ ...p, [field.id]: num }))}
                         className={cn(
                           "h-12 w-12 rounded-2xl border transition-all duration-300 flex items-center justify-center",
@@ -160,9 +191,9 @@ export function JournalDetail() {
                     ))}
                   </div>
                 ) : (
-                  <Input 
+                  <Input
                     className="rounded-xl border-stone-100 h-12"
-                    value={formData[field.id] || ''} 
+                    value={formData[field.id] || ''}
                     onChange={(e) => setFormData(p => ({ ...p, [field.id]: e.target.value }))}
                   />
                 )}
@@ -186,30 +217,27 @@ export function JournalDetail() {
               </div>
             </header>
             <div className="space-y-16">
-              {Object.entries(groupedEntries).map(([key, group]) => {
-                if (group.length === 0) return null;
-                return (
-                  <div key={key} className="space-y-8">
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.4em] text-stone-400 border-b border-stone-100 pb-2">
-                      {key === 'thisWeek' ? 'This Week' : key === 'thisMonth' ? 'Earlier this Month' : 'Historical Archives'}
-                    </h3>
-                    <div className="space-y-8">
-                      {group.map((entry) => (
-                        <motion.div key={entry.id} className="group relative">
-                          <div className="absolute left-[-20px] top-0 bottom-0 w-1 bg-stone-100 rounded-full group-hover:bg-stone-900 transition-colors" />
-                          <div className="flex flex-col gap-2">
-                            <time className="text-[10px] text-stone-400 font-medium">{format(new Date(entry.date), 'EEEE, MMM dd, yyyy')}</time>
-                            <h4 className="text-2xl font-serif text-stone-900">{entry.title}</h4>
-                            <div className="text-stone-500 font-serif leading-relaxed line-clamp-3 text-sm">
-                              {entry.content.replace(/\*\*(.*?)\*\*/g, '$1')}
-                            </div>
+              {Object.entries(groupedEntries).map(([key, group]) => group.length > 0 && (
+                <div key={key} className="space-y-8">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.4em] text-stone-400 border-b border-stone-100 pb-2">
+                    {key === 'thisWeek' ? 'This Week' : key === 'thisMonth' ? 'Earlier this Month' : 'Historical Archives'}
+                  </h3>
+                  <div className="space-y-8">
+                    {group.map((entry) => (
+                      <motion.div key={entry.id} className="group relative">
+                        <div className="absolute left-[-20px] top-0 bottom-0 w-1 bg-stone-100 rounded-full group-hover:bg-stone-900 transition-colors" />
+                        <div className="flex flex-col gap-2">
+                          <time className="text-[10px] text-stone-400 font-medium">{format(new Date(entry.date), 'EEEE, MMM dd, yyyy')}</time>
+                          <h4 className="text-2xl font-serif text-stone-900">{entry.title}</h4>
+                          <div className="text-stone-500 font-serif leading-relaxed line-clamp-3 text-sm">
+                            {entry.content.replace(/\*\*(.*?)\*\*/g, '$1')}
                           </div>
-                        </motion.div>
-                      ))}
-                    </div>
+                        </div>
+                      </motion.div>
+                    ))}
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           </section>
         )}

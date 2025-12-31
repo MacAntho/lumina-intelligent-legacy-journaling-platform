@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
-import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Calendar, TrendingUp, Trash2, Loader2, Library, Check, ChevronRight, Book, Sparkles, RefreshCw, ArrowRight, Flame } from 'lucide-react';
+import { Plus, Calendar, TrendingUp, Trash2, Loader2, Library, Check, ChevronRight, Book, Sparkles, RefreshCw, ArrowRight, Flame, History } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format, differenceInDays, isSameDay, subDays, startOfDay } from 'date-fns';
@@ -12,21 +12,24 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { JOURNAL_TEMPLATES, type JournalTemplate } from '@shared/templates';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { AdvancedSearch } from '@/components/AdvancedSearch';
 import type { Journal } from '@shared/types';
 export function Dashboard() {
-  const journals = useAppStore((s) => s.journals);
-  const entries = useAppStore((s) => s.entries);
-  const isLoading = useAppStore((s) => s.isLoading);
-  const isSaving = useAppStore((s) => s.isSaving);
-  const user = useAppStore((s) => s.user);
-  const dailyContent = useAppStore((s) => s.dailyContent);
-  const fetchDailyContent = useAppStore((s) => s.fetchDailyContent);
-  const addJournal = useAppStore((s) => s.addJournal);
-  const deleteJournal = useAppStore((s) => s.deleteJournal);
+  const journals = useAppStore(s => s.journals);
+  const entries = useAppStore(s => s.entries);
+  const isLoading = useAppStore(s => s.isLoading);
+  const isSaving = useAppStore(s => s.isSaving);
+  const user = useAppStore(s => s.user);
+  const dailyContent = useAppStore(s => s.dailyContent);
+  const promptHistory = useAppStore(s => s.promptHistory);
+  const fetchDailyContent = useAppStore(s => s.fetchDailyContent);
+  const fetchPromptHistory = useAppStore(s => s.fetchPromptHistory);
+  const addJournal = useAppStore(s => s.addJournal);
+  const deleteJournal = useAppStore(s => s.deleteJournal);
   const navigate = useNavigate();
   const [filteredJournals, setFilteredJournals] = useState<Journal[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -34,6 +37,7 @@ export function Dashboard() {
   const [selectedTemplate, setSelectedTemplate] = useState<JournalTemplate>(JOURNAL_TEMPLATES[0]);
   const [customTitle, setCustomTitle] = useState('');
   const [customDesc, setCustomDesc] = useState('');
+  const [isRefreshingPrompt, setIsRefreshingPrompt] = useState(false);
   const streak = useMemo(() => {
     if (!entries.length) return 0;
     const sortedDates = Array.from(new Set(entries.map(e => format(startOfDay(new Date(e.date)), 'yyyy-MM-dd'))))
@@ -45,11 +49,8 @@ export function Dashboard() {
     for (let i = 0; i < sortedDates.length; i++) {
       const date = startOfDay(new Date(sortedDates[i]));
       const expected = subDays(latestDate, i);
-      if (isSameDay(date, expected)) {
-        currentStreak++;
-      } else {
-        break;
-      }
+      if (isSameDay(date, expected)) currentStreak++;
+      else break;
     }
     return currentStreak;
   }, [entries]);
@@ -66,15 +67,19 @@ export function Dashboard() {
     setIsCreateOpen(false);
     setStep('template');
   };
+  const handleRegenPrompt = async () => {
+    setIsRefreshingPrompt(true);
+    await fetchDailyContent(true);
+    await fetchPromptHistory();
+    setIsRefreshingPrompt(false);
+  };
   const selectTemplate = (t: JournalTemplate) => {
     setSelectedTemplate(t);
     setCustomTitle(t.defaultTitle);
     setCustomDesc(t.description);
     setStep('config');
   };
-  const onSearchResults = useCallback((results: Journal[]) => {
-    setFilteredJournals(results);
-  }, []);
+  const onSearchResults = useCallback((results: Journal[]) => setFilteredJournals(results), []);
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const firstName = user?.name?.split(' ')[0] ?? 'Explorer';
@@ -155,25 +160,50 @@ export function Dashboard() {
           </div>
         </header>
         <section id="tour-search-bar" className="bg-stone-50/50 rounded-4xl p-1 border border-stone-100 shadow-inner">
-          <AdvancedSearch
-            items={journals}
-            onResults={onSearchResults}
-            searchFields={['title', 'description']}
-            context="global"
-          />
+          <AdvancedSearch items={journals} onResults={onSearchResults} searchFields={['title', 'description']} context="global" />
         </section>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <motion.div id="tour-daily-guidance" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <Card className="h-full rounded-4xl border-none bg-stone-900 text-white shadow-2xl relative overflow-hidden p-10">
+            <Card className="h-full min-h-[300px] rounded-4xl border-none bg-stone-900 text-white shadow-2xl relative overflow-hidden p-10">
               <div className="relative z-10 flex flex-col h-full justify-between gap-8">
                 <div>
-                  <div className="flex items-center gap-2 text-amber-400 mb-6">
-                    <Sparkles size={20} />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.4em]">Daily Guidance</span>
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-2 text-amber-400">
+                      <Sparkles size={20} />
+                      <span className="text-[10px] font-bold uppercase tracking-[0.4em]">Daily Guidance</span>
+                    </div>
+                    <Sheet>
+                      <SheetTrigger asChild>
+                        <Button variant="ghost" size="icon" className="text-white/40 hover:text-white">
+                          <History size={18} />
+                        </Button>
+                      </SheetTrigger>
+                      <SheetContent side="right" className="bg-stone-900 text-white border-stone-800">
+                        <SheetHeader className="text-left mb-8">
+                          <SheetTitle className="text-white font-serif text-2xl">Guidance Archive</SheetTitle>
+                          <SheetDescription className="text-stone-400">Past reflections Lumina has sent your way.</SheetDescription>
+                        </SheetHeader>
+                        <div className="space-y-6">
+                          {promptHistory.map((p, idx) => (
+                            <div key={idx} className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
+                              <p className="text-xs text-stone-500">{format(new Date(), 'MMMM dd, yyyy')}</p>
+                              <p className="text-sm font-serif leading-relaxed italic">"{p.prompt}"</p>
+                            </div>
+                          ))}
+                        </div>
+                      </SheetContent>
+                    </Sheet>
                   </div>
-                  <h2 className="text-3xl md:text-4xl font-serif leading-tight tracking-tight">
-                    {dailyContent?.prompt || "How did you find stillness in the chaos today?"}
-                  </h2>
+                  {isRefreshingPrompt ? (
+                    <div className="space-y-4 animate-pulse">
+                      <div className="h-8 bg-white/10 rounded-lg w-3/4" />
+                      <div className="h-8 bg-white/10 rounded-lg w-1/2" />
+                    </div>
+                  ) : (
+                    <h2 className="text-3xl md:text-4xl font-serif leading-tight tracking-tight">
+                      {dailyContent?.prompt || "How did you find stillness in the chaos today?"}
+                    </h2>
+                  )}
                 </div>
                 <div className="flex items-center justify-between">
                   <Button
@@ -182,7 +212,7 @@ export function Dashboard() {
                   >
                     Start Writing <ArrowRight size={18} className="ml-2" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => fetchDailyContent()} className="text-white/40 hover:text-white transition-colors">
+                  <Button variant="ghost" size="icon" onClick={handleRegenPrompt} disabled={isRefreshingPrompt} className={cn("text-white/40 hover:text-white transition-all", isRefreshingPrompt && "animate-spin")}>
                     <RefreshCw size={18} />
                   </Button>
                 </div>
@@ -199,18 +229,16 @@ export function Dashboard() {
         </div>
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="h-64 rounded-4xl bg-stone-100 animate-pulse" />
-            ))}
+            {[1, 2, 3].map(i => <div key={i} className="h-64 rounded-4xl bg-stone-100 animate-pulse" />)}
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-             <Card className="lg:col-span-1 rounded-4xl border-stone-100 shadow-sm bg-stone-50/50 flex flex-col p-8">
-                <CardTitle className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.3em] flex items-center gap-2 mb-8">
-                  <TrendingUp size={14} /> Global Status
-                </CardTitle>
-                <div className="text-6xl font-serif font-medium text-stone-900">{journals.length}</div>
-                <p className="text-sm text-stone-500 mt-2 font-light">Active Archives</p>
+            <Card className="lg:col-span-1 rounded-4xl border-stone-100 shadow-sm bg-stone-50/50 flex flex-col p-8">
+              <CardTitle className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.3em] flex items-center gap-2 mb-8">
+                <TrendingUp size={14} /> Global Status
+              </CardTitle>
+              <div className="text-6xl font-serif font-medium text-stone-900">{journals.length}</div>
+              <p className="text-sm text-stone-500 mt-2 font-light">Active Archives</p>
             </Card>
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8">
               {filteredJournals.length === 0 ? (
@@ -234,9 +262,7 @@ export function Dashboard() {
                             </Badge>
                           </div>
                           <CardTitle className="text-2xl font-serif text-stone-900 mb-2">{journal.title}</CardTitle>
-                          <CardDescription className="line-clamp-2 text-stone-500 font-light">
-                            {journal.description}
-                          </CardDescription>
+                          <CardDescription className="line-clamp-2 text-stone-500 font-light">{journal.description}</CardDescription>
                           <div className="mt-6 pt-6 border-t border-stone-50 flex items-center gap-2 text-xs text-stone-400">
                              <Calendar size={14} />
                              <span>Last active: {journal.lastEntryAt ? format(new Date(journal.lastEntryAt), 'MMM dd, yyyy') : 'Never'}</span>
@@ -253,7 +279,7 @@ export function Dashboard() {
                           <AlertDialogContent className="rounded-4xl border-rose-100">
                             <AlertDialogHeader>
                               <AlertDialogTitle className="font-serif text-2xl">Delete Archive?</AlertDialogTitle>
-                              <AlertDialogDescription>This will permanently erase "{journal.title}" and all contained reflections from the Edge.</AlertDialogDescription>
+                              <AlertDialogDescription>This will permanently erase "{journal.title}" from the Edge.</AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel className="rounded-xl">Retain</AlertDialogCancel>
