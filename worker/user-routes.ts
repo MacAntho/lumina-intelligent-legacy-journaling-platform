@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { jwt, sign } from "hono/jwt";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import type { Env } from './core-utils';
 import { UserAuthEntity, JournalEntity, EntryEntity, LegacyContactEntity } from "./entities";
 import { ok, bad, notFound } from './core-utils';
@@ -76,8 +76,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const sort = c.req.query('sort') || 'desc';
     let entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
     if (q) {
-      entries = entries.filter(e => 
-        e.content.toLowerCase().includes(q) || 
+      entries = entries.filter(e =>
+        e.content.toLowerCase().includes(q) ||
         e.title?.toLowerCase().includes(q) ||
         e.tags?.some(t => t.toLowerCase().includes(q))
       );
@@ -119,19 +119,28 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/insights', async (c) => {
     const payload = c.get('jwtPayload');
     const entries = await EntryEntity.listByUser(c.env, payload.userId);
+    // Sort all entries chronologically for accurate analysis
+    const sortedEntries = [...entries].sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
     const frequency: Record<string, number> = { Sun:0, Mon:0, Tue:0, Wed:0, Thu:0, Fri:0, Sat:0 };
-    entries.forEach(e => {
+    sortedEntries.forEach(e => {
       const day = format(new Date(e.date), 'eee');
       if (frequency[day] !== undefined) frequency[day]++;
     });
-    const moodTrends = entries.slice(0, 10).map(e => ({
+    // Take the most recent 14 entries for the mood trend
+    const moodTrends = sortedEntries.slice(-14).map(e => ({
       date: format(new Date(e.date), 'MM-dd'),
       score: Number(e.structuredData?.mood_score || e.structuredData?.intensity || 3)
-    })).reverse();
+    }));
+    // Fallback logic for topics if user has very few entries
+    const topTopics = sortedEntries.length > 5 
+      ? [{ text: 'Growth', value: 85 }, { text: 'Mindfulness', value: 65 }, { text: 'Routine', value: 45 }]
+      : [{ text: 'Discovery', value: 100 }];
     return ok(c, {
       moodTrends,
       writingFrequency: Object.entries(frequency).map(([day, count]) => ({ day, count })),
-      topTopics: [{ text: 'Growth', value: 85 }, { text: 'Mindfulness', value: 65 }]
+      topTopics
     });
   });
 }

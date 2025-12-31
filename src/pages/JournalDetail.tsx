@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronLeft, Send, Sparkles, Calendar, Loader2, Download, Star, Book, Mic, Image as ImageIcon, X, Search, Filter, Eye, PenLine } from 'lucide-react';
+import { ChevronLeft, Send, Sparkles, Calendar, Loader2, Download, Star, Book, Mic, Image as ImageIcon, X, Search, Eye, PenLine } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,6 +25,7 @@ export function JournalDetail() {
   const isSaving = useAppStore(s => s.isSaving);
   const fetchEntries = useAppStore(s => s.fetchEntries);
   const journal = journals.find(j => j.id === id);
+  // Default safely if journal or template isn't found/hydrated
   const template = JOURNAL_TEMPLATES.find(t => t.id === journal?.templateId) || JOURNAL_TEMPLATES[0];
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [title, setTitle] = useState('');
@@ -44,6 +45,7 @@ export function JournalDetail() {
       setFormData(d.structuredData || {});
     }
   }, [id, drafts]);
+  // Sync entries with search/filter
   useEffect(() => {
     if (id) {
       const params = new URLSearchParams();
@@ -52,7 +54,7 @@ export function JournalDetail() {
       fetchEntries(id, params.toString());
     }
   }, [id, fetchEntries, searchQuery, activeTagFilter]);
-  // Auto-save logic
+  // Auto-save draft every 30 seconds
   useEffect(() => {
     const timer = setInterval(() => {
       if (id && (title || tags.length > 0 || Object.keys(formData).length > 0)) {
@@ -71,7 +73,7 @@ export function JournalDetail() {
     const content = summaryParts.join('\n');
     await addEntry({
       journalId: id,
-      title,
+      title: title || `Reflection ${format(new Date(), 'MMM dd')}`,
       content,
       structuredData: formData,
       tags,
@@ -107,8 +109,8 @@ export function JournalDetail() {
     recognition.onend = () => setIsRecording(false);
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
-      const lastField = template.fields.find(f => f.type === 'textarea')?.id || 'content';
-      setFormData(prev => ({ ...prev, [lastField]: (prev[lastField] || '') + ' ' + transcript }));
+      const firstTextarea = template.fields.find(f => f.type === 'textarea')?.id || 'content';
+      setFormData(prev => ({ ...prev, [firstTextarea]: (prev[firstTextarea] || '') + ' ' + transcript }));
     };
     if (isRecording) {
       recognition.stop();
@@ -121,18 +123,33 @@ export function JournalDetail() {
     if (type === 'number') finalValue = value === '' ? 0 : Number(value);
     setFormData(prev => ({ ...prev, [fieldId]: finalValue }));
   }, []);
-  if (!journal) return <div className="p-20 text-center">Journal not found</div>;
-  const IconComponent = (LucideIcons as any)[template.icon] || Book;
-  // Simple Markdown Parser (very basic for demo)
   const renderMarkdown = (text: string) => {
+    if (!text) return null;
     return text.split('\n').map((line, i) => {
-      if (line.startsWith('**')) {
-        const parts = line.split('**');
-        return <p key={i} className="mb-2"><strong className="text-stone-900">{parts[1]}</strong>{parts[2]}</p>;
+      // Improved regex to handle bold headers better
+      const boldMatch = line.match(/^\*\*(.*?)\*\*(.*)/);
+      if (boldMatch) {
+        return (
+          <p key={i} className="mb-2">
+            <strong className="text-stone-900">{boldMatch[1]}</strong>
+            {boldMatch[2]}
+          </p>
+        );
       }
       return <p key={i} className="mb-2">{line}</p>;
     });
   };
+  if (!journal) {
+    return (
+      <AppLayout container>
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <Loader2 className="animate-spin text-stone-300 h-8 w-8" />
+          <p className="text-stone-500 font-serif">Opening journal...</p>
+        </div>
+      </AppLayout>
+    );
+  }
+  const IconComponent = (LucideIcons as any)[template.icon] || Book;
   const allTags = Array.from(new Set(entries.flatMap(e => e.tags || [])));
   return (
     <AppLayout>
@@ -151,21 +168,19 @@ export function JournalDetail() {
               </Button>
             </div>
           </div>
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="p-1.5 rounded-lg bg-stone-100 text-stone-900">
-                  <IconComponent size={14} />
-                </div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-stone-500">{template.name}</div>
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className={cn("p-1.5 rounded-lg text-white", `bg-${template.color}-500`)}>
+                <IconComponent size={14} />
               </div>
-              <h1 className="text-4xl font-serif font-medium text-stone-900 dark:text-stone-50">{journal.title}</h1>
+              <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-stone-500">{template.name}</div>
             </div>
+            <h1 className="text-4xl font-serif font-medium text-stone-900 dark:text-stone-50">{journal.title}</h1>
           </div>
         </header>
         <div className="grid grid-cols-1 gap-12">
           {!previewMode ? (
-            <motion.section 
+            <motion.section
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-8 shadow-sm print:hidden"
@@ -173,8 +188,8 @@ export function JournalDetail() {
               <div className="space-y-6">
                 <div className="space-y-2">
                   <Label className="text-stone-400 text-[10px] uppercase font-bold tracking-widest">Entry Title</Label>
-                  <Input 
-                    placeholder="Capture the essence of this moment..." 
+                  <Input
+                    placeholder="Capture the essence of this moment..."
                     className="border-none text-2xl font-serif p-0 focus-visible:ring-0 placeholder:text-stone-200 h-auto"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
@@ -191,11 +206,11 @@ export function JournalDetail() {
                           value={formData[field.id] || ''}
                           onChange={(e) => updateField(field.id, e.target.value)}
                         />
-                        <button 
+                        <button
                           onClick={toggleRecording}
                           className={cn(
                             "absolute bottom-3 right-3 p-2 rounded-full transition-all",
-                            isRecording ? "bg-red-500 text-white animate-pulse" : "bg-stone-100 text-stone-400 hover:text-stone-600"
+                            isRecording ? "bg-red-500 text-white animate-recording" : "bg-stone-100 text-stone-400 hover:text-stone-600"
                           )}
                         >
                           <Mic size={16} />
@@ -226,10 +241,10 @@ export function JournalDetail() {
                             onClick={() => updateField(field.id, num)}
                             className={cn(
                               "p-3 rounded-xl border transition-all hover:scale-105",
-                              formData[field.id] >= num ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-stone-50 border-stone-100 text-stone-300"
+                              (formData[field.id] || 0) >= num ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-stone-50 border-stone-100 text-stone-300"
                             )}
                           >
-                            <Star size={18} fill={formData[field.id] >= num ? "currentColor" : "none"} />
+                            <Star size={18} fill={(formData[field.id] || 0) >= num ? "currentColor" : "none"} />
                           </button>
                         ))}
                       </div>
@@ -259,7 +274,7 @@ export function JournalDetail() {
                         {tag} <button onClick={() => setTags(tags.filter(t => t !== tag))}><X size={10}/></button>
                       </Badge>
                     ))}
-                    <Input 
+                    <Input
                       placeholder="Add tag + press Enter"
                       className="inline-flex w-40 border-none h-6 text-xs focus-visible:ring-0 p-0"
                       onKeyDown={(e) => {
@@ -270,21 +285,6 @@ export function JournalDetail() {
                       }}
                     />
                   </div>
-                  {images.length > 0 && (
-                    <div className="grid grid-cols-4 gap-4 pt-2">
-                      {images.map((img, i) => (
-                        <div key={i} className="relative aspect-square rounded-2xl overflow-hidden border border-stone-100 group">
-                          <img src={img} className="w-full h-full object-cover" />
-                          <button 
-                            onClick={() => setImages(images.filter((_, idx) => idx !== i))}
-                            className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X size={10} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
               <div className="mt-8 flex items-center justify-between border-t border-stone-50 pt-6">
@@ -302,7 +302,7 @@ export function JournalDetail() {
               </div>
             </motion.section>
           ) : (
-            <motion.section 
+            <motion.section
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="prose-lumina bg-white border border-stone-200 rounded-3xl p-12 shadow-sm min-h-[400px]"
@@ -322,11 +322,6 @@ export function JournalDetail() {
                   </div>
                 </div>
               ))}
-              {images.length > 0 && (
-                <div className="grid grid-cols-2 gap-4 mt-8">
-                  {images.map((img, i) => <img key={i} src={img} className="rounded-2xl w-full" />)}
-                </div>
-              )}
             </motion.section>
           )}
           <section className="space-y-8 pb-20">
@@ -334,32 +329,30 @@ export function JournalDetail() {
               <h2 className="text-xl font-medium text-stone-900 flex items-center gap-2">
                 Discovery <span className="text-sm font-normal text-stone-400">({entries.length})</span>
               </h2>
-              <div className="flex gap-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={14} />
-                  <Input 
-                    placeholder="Search entries..." 
-                    className="pl-9 rounded-full h-9 bg-stone-50 border-stone-100 text-sm w-48 focus:w-64 transition-all"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={14} />
+                <Input
+                  placeholder="Search entries..."
+                  className="pl-9 rounded-full h-9 bg-stone-50 border-stone-100 text-sm w-48 focus:w-64 transition-all"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
             </div>
             {allTags.length > 0 && (
               <div className="flex flex-wrap gap-2 print:hidden">
-                <Badge 
-                  variant={activeTagFilter === null ? "default" : "outline"} 
-                  className="rounded-full cursor-pointer bg-stone-900"
+                <Badge
+                  variant={activeTagFilter === null ? "default" : "outline"}
+                  className={cn("rounded-full cursor-pointer", activeTagFilter === null && "bg-stone-900")}
                   onClick={() => setActiveTagFilter(null)}
                 >
                   All
                 </Badge>
                 {allTags.map(tag => (
-                  <Badge 
+                  <Badge
                     key={tag}
                     variant={activeTagFilter === tag ? "default" : "outline"}
-                    className={cn("rounded-full cursor-pointer", activeTagFilter === tag ? "bg-stone-900" : "text-stone-500")}
+                    className={cn("rounded-full cursor-pointer", activeTagFilter === tag && "bg-stone-900")}
                     onClick={() => setActiveTagFilter(tag)}
                   >
                     {tag}
@@ -380,7 +373,8 @@ export function JournalDetail() {
                       className="bg-stone-50 dark:bg-stone-900/50 border border-stone-100 rounded-3xl p-8 print:border-none print:p-0"
                     >
                       <div className="flex justify-between items-start mb-6">
-                        <time className="text-xs font-medium text-stone-400">
+                        <time className="text-xs font-medium text-stone-400 flex items-center gap-1">
+                          <Calendar size={12} />
                           {format(new Date(entry.date), 'EEEE, MMM dd, yyyy')}
                         </time>
                         {entry.mood && (
@@ -393,13 +387,6 @@ export function JournalDetail() {
                       <div className="prose-lumina-sm text-stone-700 font-serif leading-relaxed space-y-4">
                         {renderMarkdown(entry.content)}
                       </div>
-                      {entry.images && entry.images.length > 0 && (
-                        <div className="grid grid-cols-4 gap-3 mt-6">
-                          {entry.images.map((img, i) => (
-                            <img key={i} src={img} className="rounded-xl aspect-square object-cover" />
-                          ))}
-                        </div>
-                      )}
                       {entry.tags && entry.tags.length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-6">
                           {entry.tags.map(tag => (
