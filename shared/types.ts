@@ -33,6 +33,7 @@ export interface RegisterRequest {
 export interface Journal {
   id: string;
   userId: string;
+  templateId: string;
   title: string;
   description: string;
   type: JournalType;
@@ -44,6 +45,7 @@ export interface Entry {
   userId: string;
   journalId: string;
   content: string;
+  structuredData?: Record<string, any>;
   date: string;
   mood: string;
 }

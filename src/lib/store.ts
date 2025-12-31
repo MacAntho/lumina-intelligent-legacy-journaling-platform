@@ -45,13 +45,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       const user = await api<User>('/api/auth/me');
       const journals = await api<Journal[]>('/api/journals');
       const contacts = await api<LegacyContact[]>('/api/legacy-contacts');
-      set({ 
-        user, 
-        journals, 
-        legacyContacts: contacts, 
-        isAuthenticated: true, 
+      set({
+        user,
+        journals,
+        legacyContacts: contacts,
+        isAuthenticated: true,
         isLoading: false,
-        isInitialized: true 
+        isInitialized: true
       });
       get().fetchInsights();
     } catch (error) {
@@ -68,12 +68,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         body: JSON.stringify(req)
       });
       localStorage.setItem('lumina_token', res.token);
-      set({ 
-        user: res.user, 
-        token: res.token, 
-        isAuthenticated: true, 
+      set({
+        user: res.user,
+        token: res.token,
+        isAuthenticated: true,
         isLoading: false,
-        isInitialized: true 
+        isInitialized: true
       });
       toast.success('Welcome back to Lumina');
     } catch (error) {
@@ -91,12 +91,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         body: JSON.stringify(req)
       });
       localStorage.setItem('lumina_token', res.token);
-      set({ 
-        user: res.user, 
-        token: res.token, 
-        isAuthenticated: true, 
+      set({
+        user: res.user,
+        token: res.token,
+        isAuthenticated: true,
         isLoading: false,
-        isInitialized: true 
+        isInitialized: true
       });
       toast.success('Sanctuary created');
     } catch (error) {
@@ -108,15 +108,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   logout: () => {
     localStorage.removeItem('lumina_token');
-    set({ 
-      user: null, 
-      token: null, 
-      isAuthenticated: false, 
-      journals: [], 
-      entries: [], 
-      legacyContacts: [], 
+    set({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      journals: [],
+      entries: [],
+      legacyContacts: [],
       insightData: null,
-      isInitialized: false 
+      isInitialized: false
     });
   },
   updateProfile: async (profile) => {
