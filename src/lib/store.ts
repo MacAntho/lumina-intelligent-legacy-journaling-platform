@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { api } from './api-client';
 import { toast } from 'sonner';
-import type { 
-  Journal, Entry, User, LegacyContact, InsightData, 
-  LoginRequest, RegisterRequest, AuthResponse, AiMessage, 
-  DailyContent, ExportLog, LegacyAuditLog 
+import type {
+  Journal, Entry, User, LegacyContact, InsightData,
+  LoginRequest, RegisterRequest, AuthResponse, AiMessage,
+  DailyContent, ExportLog, LegacyAuditLog, AppNotification
 } from '@shared/types';
 interface AppState {
   user: User | null;
@@ -19,6 +19,8 @@ interface AppState {
   aiChatHistory: AiMessage[];
   dailyContent: DailyContent | null;
   exportHistory: ExportLog[];
+  notifications: AppNotification[];
+  unreadCount: number;
   isLoading: boolean;
   isSaving: boolean;
   isInitialized: boolean;
@@ -43,6 +45,10 @@ interface AppState {
   fetchExportHistory: () => Promise<void>;
   sendAiMessage: (content: string) => Promise<void>;
   clearChatHistory: () => void;
+  fetchNotifications: () => Promise<void>;
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
 }
 export const useAppStore = create<AppState>((set, get) => ({
   user: null,
@@ -57,6 +63,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   aiChatHistory: JSON.parse(localStorage.getItem('lumina_chat') || '[]'),
   dailyContent: null,
   exportHistory: [],
+  notifications: [],
+  unreadCount: 0,
   isLoading: false,
   isSaving: false,
   isInitialized: false,
@@ -79,6 +87,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().fetchInsights();
       get().fetchDailyContent();
       get().fetchLegacyAuditLogs();
+      get().fetchNotifications();
       // Start Heartbeat Interval
       setInterval(() => get().heartbeat(), 300000); // Every 5 minutes
     } catch (error) {
@@ -92,6 +101,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const user = await api<User>('/api/auth/heartbeat', { method: 'PUT' });
       set({ user });
+      get().fetchNotifications();
     } catch (e) { console.error('Heartbeat skipped'); }
   },
   login: async (req) => {
@@ -152,6 +162,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       insightData: null,
       aiChatHistory: [],
       dailyContent: null,
+      notifications: [],
+      unreadCount: 0,
       isInitialized: false
     });
   },
@@ -315,5 +327,51 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearChatHistory: () => {
     localStorage.removeItem('lumina_chat');
     set({ aiChatHistory: [] });
+  },
+  fetchNotifications: async () => {
+    try {
+      const notifications = await api<AppNotification[]>('/api/notifications');
+      set({ 
+        notifications,
+        unreadCount: notifications.filter(n => !n.isRead).length
+      });
+    } catch (e) { console.error('Fetch notifications failed', e); }
+  },
+  markNotificationRead: async (id) => {
+    const prev = get().notifications;
+    set({ 
+      notifications: prev.map(n => n.id === id ? { ...n, isRead: true } : n),
+      unreadCount: Math.max(0, get().unreadCount - 1)
+    });
+    try {
+      await api(`/api/notifications/${id}/read`, { method: 'PATCH' });
+    } catch (e) {
+      set({ notifications: prev, unreadCount: prev.filter(n => !n.isRead).length });
+    }
+  },
+  markAllNotificationsRead: async () => {
+    const prev = get().notifications;
+    set({ 
+      notifications: prev.map(n => ({ ...n, isRead: true })),
+      unreadCount: 0
+    });
+    try {
+      await api('/api/notifications/read-all', { method: 'POST' });
+    } catch (e) {
+      set({ notifications: prev, unreadCount: prev.filter(n => !n.isRead).length });
+    }
+  },
+  deleteNotification: async (id) => {
+    const prev = get().notifications;
+    const note = prev.find(n => n.id === id);
+    set({ 
+      notifications: prev.filter(n => n.id !== id),
+      unreadCount: note && !note.isRead ? Math.max(0, get().unreadCount - 1) : get().unreadCount
+    });
+    try {
+      await api(`/api/notifications/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      set({ notifications: prev, unreadCount: prev.filter(n => !n.isRead).length });
+    }
   }
 }));

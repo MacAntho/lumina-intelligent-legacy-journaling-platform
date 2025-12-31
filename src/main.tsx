@@ -22,6 +22,16 @@ import { AIChat } from '@/pages/AIChat'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { LegacyView } from '@/pages/LegacyView'
 import { AuthGuard } from '@/components/AuthGuard'
+// PWA Registration & Permissions
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then(registration => {
+      console.log('Lumina PWA: ServiceWorker registered with scope: ', registration.scope);
+    }, err => {
+      console.log('Lumina PWA: ServiceWorker registration failed: ', err);
+    });
+  });
+}
 const queryClient = new QueryClient();
 const router = createBrowserRouter([
   {

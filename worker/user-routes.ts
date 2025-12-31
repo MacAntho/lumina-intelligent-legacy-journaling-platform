@@ -5,7 +5,7 @@ import type { Env } from './core-utils';
 import {
   UserAuthEntity, JournalEntity, EntryEntity,
   LegacyContactEntity, LegacyShareEntity, ExportLogEntity,
-  LegacyAuditLogEntity
+  LegacyAuditLogEntity, NotificationEntity
 } from "./entities";
 import { ok, bad, notFound } from './core-utils';
 import type { LoginRequest, RegisterRequest } from "@shared/types";
@@ -35,7 +35,15 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         id: userId,
         name: body.name,
         email: body.email.toLowerCase(),
-        preferences: { theme: 'system', notificationsEnabled: true, language: 'en' },
+        preferences: { 
+          theme: 'system', 
+          notificationsEnabled: true, 
+          language: 'en',
+          notificationSettings: {
+            entry: true, prompt: true, affirmation: true, share: true, access: true, insight: true, export: true, reminder: true, limit: true, activity: true
+          },
+          quietHours: { start: "22:00", end: "08:00", enabled: false }
+        },
         createdAt: new Date().toISOString(),
         lastHeartbeatAt: new Date().toISOString()
       }
@@ -84,6 +92,15 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       action: 'view',
       timestamp: new Date().toISOString()
     });
+    await NotificationEntity.create(c.env, {
+      id: crypto.randomUUID(),
+      userId: share.userId,
+      type: 'access',
+      title: 'Legacy Archive Accessed',
+      message: `Your journal "${journal.title}" was viewed by a recipient.`,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    });
     const entries = await EntryEntity.listByJournal(c.env, share.journalId, share.userId);
     return ok(c, { ...metadata, entries: entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()) });
   });
@@ -97,6 +114,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       const hash = await hashPassword(password, "legacy-salt");
       if (hash !== share.passwordHash) return bad(c, 'Access Denied');
     }
+    const journal = await new JournalEntity(c.env, share.journalId).getState();
     await LegacyAuditLogEntity.create(c.env, {
       id: crypto.randomUUID(),
       userId: share.userId,
@@ -106,7 +124,15 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       action: 'view',
       timestamp: new Date().toISOString()
     });
-    const journal = await new JournalEntity(c.env, share.journalId).getState();
+    await NotificationEntity.create(c.env, {
+      id: crypto.randomUUID(),
+      userId: share.userId,
+      type: 'access',
+      title: 'Legacy Archive Unlocked',
+      message: `The password barrier for your journal "${journal.title}" was successfully bypassed by a recipient.`,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    });
     const entries = await EntryEntity.listByJournal(c.env, share.journalId, share.userId);
     return ok(c, {
       journalTitle: journal.title,
@@ -117,6 +143,29 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   // Protected Routes Middleware
   app.use('/api/*', jwt({ secret: JWT_SECRET }));
+  app.get('/api/notifications', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await NotificationEntity.listByUser(c.env, payload.userId));
+  });
+  app.patch('/api/notifications/:id/read', async (c) => {
+    const id = c.req.param('id');
+    const note = new NotificationEntity(c.env, id);
+    if (await note.exists()) {
+      await note.patch({ isRead: true });
+      return ok(c, true);
+    }
+    return notFound(c);
+  });
+  app.post('/api/notifications/read-all', async (c) => {
+    const payload = c.get('jwtPayload');
+    await NotificationEntity.markAllAsRead(c.env, payload.userId);
+    return ok(c, true);
+  });
+  app.delete('/api/notifications/:id', async (c) => {
+    const id = c.req.param('id');
+    await NotificationEntity.delete(c.env, id);
+    return ok(c, true);
+  });
   app.put('/api/auth/heartbeat', async (c) => {
     const payload = c.get('jwtPayload');
     const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
@@ -270,6 +319,16 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       viewCount: 0,
       createdAt: new Date().toISOString()
     });
+    const journal = await new JournalEntity(c.env, journalId).getState();
+    await NotificationEntity.create(c.env, {
+      id: crypto.randomUUID(),
+      userId: payload.userId,
+      type: 'share',
+      title: 'Legacy Link Generated',
+      message: `A secure link for "${journal.title}" was created for ${recipientEmail}.`,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    });
     await LegacyAuditLogEntity.create(c.env, {
       id: crypto.randomUUID(),
       userId: payload.userId,
@@ -320,6 +379,16 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       id: crypto.randomUUID(),
       userId: payload.userId,
       timestamp: new Date().toISOString()
+    });
+    const journal = await new JournalEntity(c.env, body.journalId).getState();
+    await NotificationEntity.create(c.env, {
+      id: crypto.randomUUID(),
+      userId: payload.userId,
+      type: 'export',
+      title: 'Archive Exported',
+      message: `Your journal "${journal.title}" has been successfully exported to PDF.`,
+      isRead: false,
+      createdAt: new Date().toISOString()
     });
     return ok(c, log);
   });

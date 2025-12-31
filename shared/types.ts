@@ -4,11 +4,29 @@ export interface ApiResponse<T = unknown> {
   error?: string;
 }
 export type JournalType = 'reflective' | 'fitness' | 'gratitude' | 'legacy' | 'finance' | 'reading' | 'mood' | 'travel' | 'creative' | 'dreams' | 'meals';
+export type NotificationType = 'entry' | 'prompt' | 'affirmation' | 'share' | 'access' | 'insight' | 'export' | 'reminder' | 'limit' | 'activity';
+export interface AppNotification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  link?: string;
+  isRead: boolean;
+  createdAt: string;
+  metadata?: Record<string, any>;
+}
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'system';
   notificationsEnabled: boolean;
   language: 'en' | 'es' | 'fr' | 'de';
   defaultJournalId?: string;
+  notificationSettings: Record<NotificationType, boolean>;
+  quietHours: {
+    start: string; // "HH:mm"
+    end: string;   // "HH:mm"
+    enabled: boolean;
+  };
 }
 export interface User {
   id: string;

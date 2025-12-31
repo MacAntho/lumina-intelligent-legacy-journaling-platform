@@ -1,5 +1,5 @@
 import { IndexedEntity, Env } from "./core-utils";
-import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog, LegacyAuditLog } from "@shared/types";
+import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog, LegacyAuditLog, AppNotification } from "@shared/types";
 export interface UserAuthData {
   id: string; // email
   passwordHash: string;
@@ -17,7 +17,15 @@ export class UserAuthEntity extends IndexedEntity<UserAuthData> {
       id: "",
       name: "",
       email: "",
-      preferences: { theme: 'system', notificationsEnabled: true, language: 'en' },
+      preferences: { 
+        theme: 'system', 
+        notificationsEnabled: true, 
+        language: 'en',
+        notificationSettings: {
+          entry: true, prompt: true, affirmation: true, share: true, access: true, insight: true, export: true, reminder: true, limit: true, activity: true
+        },
+        quietHours: { start: "22:00", end: "08:00", enabled: false }
+      },
       createdAt: "",
       lastHeartbeatAt: ""
     }
@@ -134,5 +142,29 @@ export class LegacyAuditLogEntity extends IndexedEntity<LegacyAuditLog> {
   static async listByUser(env: Env, userId: string): Promise<LegacyAuditLog[]> {
     const { items } = await this.list(env, null, 1000);
     return items.filter(l => l.userId === userId).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }
+}
+export class NotificationEntity extends IndexedEntity<AppNotification> {
+  static readonly entityName = "notification";
+  static readonly indexName = "notifications";
+  static readonly initialState: AppNotification = {
+    id: "",
+    userId: "",
+    type: "activity",
+    title: "",
+    message: "",
+    isRead: false,
+    createdAt: ""
+  };
+  static async listByUser(env: Env, userId: string): Promise<AppNotification[]> {
+    const { items } = await this.list(env, null, 100);
+    return items
+      .filter(n => n.userId === userId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  static async markAllAsRead(env: Env, userId: string): Promise<void> {
+    const { items } = await this.list(env, null, 1000);
+    const userNotes = items.filter(n => n.userId === userId && !n.isRead);
+    await Promise.all(userNotes.map(n => new NotificationEntity(env, n.id).patch({ isRead: true })));
   }
 }

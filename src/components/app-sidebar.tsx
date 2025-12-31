@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { NotificationCenter } from "@/components/NotificationCenter";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 export function AppSidebar(): JSX.Element {
   const journals = useAppStore(s => s.journals);
   const user = useAppStore(s => s.user);
@@ -40,13 +42,25 @@ export function AppSidebar(): JSX.Element {
   };
   return (
     <Sidebar className="border-r border-stone-200 dark:border-stone-800">
-      <SidebarHeader className="p-4">
+      <SidebarHeader className="p-4 flex flex-row items-center justify-between">
         <Link to="/" className="flex items-center gap-3 px-2 group">
           <div className="h-8 w-8 rounded-lg bg-stone-900 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
             <Sparkles size={18} />
           </div>
           <span className="text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">Lumina</span>
         </Link>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <NotificationCenter />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p className="text-[10px]">Alerts & Transmissions</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
