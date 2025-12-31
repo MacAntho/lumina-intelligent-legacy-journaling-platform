@@ -1,5 +1,5 @@
 import { IndexedEntity, Env } from "./core-utils";
-import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog } from "@shared/types";
+import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog, LegacyAuditLog } from "@shared/types";
 export interface UserAuthData {
   id: string; // email
   passwordHash: string;
@@ -18,7 +18,8 @@ export class UserAuthEntity extends IndexedEntity<UserAuthData> {
       name: "",
       email: "",
       preferences: { theme: 'system', notificationsEnabled: true, language: 'en' },
-      createdAt: ""
+      createdAt: "",
+      lastHeartbeatAt: ""
     }
   };
   static async findByEmail(env: Env, email: string): Promise<UserAuthData | null> {
@@ -63,7 +64,7 @@ export class EntryEntity extends IndexedEntity<Entry> {
   static async listByJournal(env: Env, journalId: string, userId: string): Promise<Entry[]> {
     const { items } = await this.list(env, null, 1000);
     return items
-      .filter(e => e.journalId === journalId && e.userId === userId)
+      .filter(e => e.journalId === journalId && (userId === "public" || e.userId === userId))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
   static async listByUser(env: Env, userId: string): Promise<Entry[]> {
@@ -79,7 +80,9 @@ export class LegacyContactEntity extends IndexedEntity<LegacyContact> {
     userId: "",
     name: "",
     email: "",
-    status: "pending"
+    relationship: "",
+    status: "pending",
+    assignedJournalIds: []
   };
   static async listByUser(env: Env, userId: string): Promise<LegacyContact[]> {
     const { items } = await this.list(env, null, 1000);
@@ -95,6 +98,8 @@ export class LegacyShareEntity extends IndexedEntity<LegacyShare> {
     userId: "",
     recipientEmail: "",
     accessKey: "",
+    permissions: { canView: true, canDownload: false, canPrint: false },
+    viewCount: 0,
     createdAt: ""
   };
 }
@@ -110,6 +115,23 @@ export class ExportLogEntity extends IndexedEntity<ExportLog> {
     status: "success"
   };
   static async listByUser(env: Env, userId: string): Promise<ExportLog[]> {
+    const { items } = await this.list(env, null, 1000);
+    return items.filter(l => l.userId === userId).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }
+}
+export class LegacyAuditLogEntity extends IndexedEntity<LegacyAuditLog> {
+  static readonly entityName = "legacy-audit";
+  static readonly indexName = "legacy-audits";
+  static readonly initialState: LegacyAuditLog = {
+    id: "",
+    userId: "",
+    shareId: "",
+    journalId: "",
+    recipientEmail: "",
+    action: "view",
+    timestamp: ""
+  };
+  static async listByUser(env: Env, userId: string): Promise<LegacyAuditLog[]> {
     const { items } = await this.list(env, null, 1000);
     return items.filter(l => l.userId === userId).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }

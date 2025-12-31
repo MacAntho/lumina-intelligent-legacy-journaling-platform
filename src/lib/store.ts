@@ -1,7 +1,11 @@
 import { create } from 'zustand';
 import { api } from './api-client';
 import { toast } from 'sonner';
-import type { Journal, Entry, User, LegacyContact, InsightData, LoginRequest, RegisterRequest, AuthResponse, AiMessage, DailyContent, ExportLog } from '@shared/types';
+import type { 
+  Journal, Entry, User, LegacyContact, InsightData, 
+  LoginRequest, RegisterRequest, AuthResponse, AiMessage, 
+  DailyContent, ExportLog, LegacyAuditLog 
+} from '@shared/types';
 interface AppState {
   user: User | null;
   token: string | null;
@@ -10,6 +14,7 @@ interface AppState {
   entries: Entry[];
   drafts: Record<string, Partial<Entry>>;
   legacyContacts: LegacyContact[];
+  legacyAuditLogs: LegacyAuditLog[];
   insightData: InsightData | null;
   aiChatHistory: AiMessage[];
   dailyContent: DailyContent | null;
@@ -21,6 +26,7 @@ interface AppState {
   login: (req: LoginRequest) => Promise<void>;
   register: (req: RegisterRequest) => Promise<void>;
   logout: () => void;
+  heartbeat: () => Promise<void>;
   updateProfile: (profile: Partial<User>) => Promise<void>;
   fetchEntries: (journalId: string, params?: string) => Promise<void>;
   addJournal: (journal: Partial<Journal>) => Promise<void>;
@@ -31,6 +37,7 @@ interface AppState {
   fetchInsights: () => Promise<void>;
   addLegacyContact: (contact: Partial<LegacyContact>) => Promise<void>;
   removeLegacyContact: (id: string) => Promise<void>;
+  fetchLegacyAuditLogs: () => Promise<void>;
   fetchDailyContent: () => Promise<void>;
   logExport: (log: Partial<ExportLog>) => Promise<void>;
   fetchExportHistory: () => Promise<void>;
@@ -45,6 +52,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   entries: [],
   drafts: JSON.parse(localStorage.getItem('lumina_drafts') || '{}'),
   legacyContacts: [],
+  legacyAuditLogs: [],
   insightData: null,
   aiChatHistory: JSON.parse(localStorage.getItem('lumina_chat') || '[]'),
   dailyContent: null,
@@ -54,9 +62,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   isInitialized: false,
   initialize: async () => {
     const token = get().token;
-    const isLoading = get().isLoading;
-    const isInitialized = get().isInitialized;
-    if (!token || isLoading || isInitialized) return;
+    if (!token || get().isInitialized) return;
     set({ isLoading: true });
     try {
       const user = await api<User>('/api/auth/me');
@@ -72,11 +78,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       get().fetchInsights();
       get().fetchDailyContent();
+      get().fetchLegacyAuditLogs();
+      // Start Heartbeat Interval
+      setInterval(() => get().heartbeat(), 300000); // Every 5 minutes
     } catch (error) {
       console.error('Initialization failed:', error);
       get().logout();
       set({ isLoading: false, isInitialized: false });
     }
+  },
+  heartbeat: async () => {
+    if (!get().isAuthenticated) return;
+    try {
+      const user = await api<User>('/api/auth/heartbeat', { method: 'PUT' });
+      set({ user });
+    } catch (e) { console.error('Heartbeat skipped'); }
   },
   login: async (req) => {
     set({ isLoading: true });
@@ -93,9 +109,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         isLoading: false,
         isInitialized: true
       });
-      toast.success('Welcome back to Lumina');
+      toast.success('Sanctuary Unlocked');
     } catch (error) {
-      console.error('Login failed:', error);
       set({ isLoading: false });
       toast.error('Invalid credentials');
       throw error;
@@ -116,11 +131,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         isLoading: false,
         isInitialized: true
       });
-      toast.success('Sanctuary created');
+      toast.success('Your digital legacy has begun.');
     } catch (error) {
-      console.error('Registration failed:', error);
       set({ isLoading: false });
-      toast.error('Registration failed');
+      toast.error('Could not create sanctuary');
       throw error;
     }
   },
@@ -134,6 +148,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       journals: [],
       entries: [],
       legacyContacts: [],
+      legacyAuditLogs: [],
       insightData: null,
       aiChatHistory: [],
       dailyContent: null,
@@ -143,14 +158,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateProfile: async (profile) => {
     set({ isSaving: true });
     try {
-      const updated = await api<User>('/api/auth/me', {
+      const updated = await api<User>('/api/auth/settings', {
         method: 'PUT',
         body: JSON.stringify(profile)
       });
       set({ user: updated, isSaving: false });
-      toast.success('Profile updated');
+      toast.success('Profile preferences updated');
     } catch (error) {
-      console.error('Profile update failed:', error);
       set({ isSaving: false });
       toast.error('Update failed');
     }
@@ -172,8 +186,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         body: JSON.stringify(journalData)
       });
       set(state => ({ journals: [...state.journals, journal], isSaving: false }));
+      toast.success('New sanctuary initialized');
     } catch (error) {
-      console.error('Add journal failed:', error);
       set({ isSaving: false });
     }
   },
@@ -202,7 +216,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
       get().clearDraft(entry.journalId);
     } catch (error) {
-      console.error('Add entry failed:', error);
       set({ isSaving: false });
     }
   },
@@ -235,7 +248,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       set(state => ({ legacyContacts: [...state.legacyContacts, contact], isSaving: false }));
     } catch (error) {
-      console.error('Add contact failed:', error);
       set({ isSaving: false });
     }
   },
@@ -246,6 +258,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('Remove contact failed:', error);
     }
+  },
+  fetchLegacyAuditLogs: async () => {
+    try {
+      const logs = await api<LegacyAuditLog[]>('/api/legacy/audit');
+      set({ legacyAuditLogs: logs });
+    } catch (e) { console.error('Fetch audit logs failed', e); }
   },
   fetchDailyContent: async () => {
     try {
@@ -290,9 +308,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         return { aiChatHistory: newHistory, isSaving: false };
       });
     } catch (error) {
-      console.error('AI chat failed:', error);
       set({ isSaving: false });
-      toast.error('AI connection lost');
+      toast.error('AI link severed. Reconnecting...');
     }
   },
   clearChatHistory: () => {

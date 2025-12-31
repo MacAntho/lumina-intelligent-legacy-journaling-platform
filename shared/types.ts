@@ -3,7 +3,7 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
 }
-export type JournalType = 'reflective' | 'fitness' | 'gratitude' | 'legacy';
+export type JournalType = 'reflective' | 'fitness' | 'gratitude' | 'legacy' | 'finance' | 'reading' | 'mood' | 'travel' | 'creative' | 'dreams' | 'meals';
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'system';
   notificationsEnabled: boolean;
@@ -18,6 +18,7 @@ export interface User {
   profileImage?: string;
   preferences: UserPreferences;
   createdAt: string;
+  lastHeartbeatAt?: string;
 }
 export interface AuthResponse {
   user: User;
@@ -60,7 +61,10 @@ export interface LegacyContact {
   userId: string;
   name: string;
   email: string;
+  relationship?: string;
   status: 'pending' | 'verified';
+  assignedJournalIds: string[];
+  lastVerifiedAt?: string;
 }
 export interface InsightData {
   moodTrends: { date: string; score: number }[];
@@ -78,6 +82,11 @@ export interface DailyContent {
   affirmation: string;
   targetJournalId?: string;
 }
+export interface LegacyPermissions {
+  canView: boolean;
+  canDownload: boolean;
+  canPrint: boolean;
+}
 export interface LegacyShare {
   id: string;
   journalId: string;
@@ -85,12 +94,20 @@ export interface LegacyShare {
   recipientEmail: string;
   expiresAt?: string;
   accessKey: string;
+  passwordHash?: string;
+  passwordHint?: string;
+  permissions: LegacyPermissions;
+  viewCount: number;
   createdAt: string;
 }
 export interface LegacyPublicData {
   journalTitle: string;
   authorName: string;
   entries: Entry[];
+  permissions: LegacyPermissions;
+  passwordRequired: boolean;
+  passwordHint?: string;
+  expiresAt?: string;
 }
 export interface ExportOptions {
   title: string;
@@ -111,3 +128,15 @@ export interface ExportLog {
   status: 'success' | 'failed';
   options?: Partial<ExportOptions>;
 }
+export interface LegacyAuditLog {
+  id: string;
+  userId: string;
+  shareId: string;
+  journalId: string;
+  recipientEmail: string;
+  action: 'view' | 'download' | 'print' | 'revoke' | 'create';
+  timestamp: string;
+  ip?: string;
+  userAgent?: string;
+}
+export type LegacyTrigger = 'inactivity' | 'scheduled' | 'manual';
