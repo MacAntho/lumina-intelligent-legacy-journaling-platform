@@ -101,24 +101,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!token || get().isInitialized) return;
     set({ isLoading: true });
     try {
-      const user = await api<User>('/api/auth/me');
-      const journals = await api<Journal[]>('/api/journals');
-      const contacts = await api<LegacyContact[]>('/api/legacy-contacts');
-      const entries = await api<Entry[]>('/api/entries/all').catch(() => []);
+      const [user, journals, contacts, entries] = await Promise.all([
+        api<User>('/api/auth/me'),
+        api<Journal[]>('/api/journals'),
+        api<LegacyContact[]>('/api/legacy-contacts'),
+        api<Entry[]>('/api/entries/all').catch(() => [])
+      ]);
       set({
         user, journals, entries, legacyContacts: contacts,
         isAuthenticated: true, isLoading: false, isInitialized: true,
         isTourActive: !user.preferences?.onboardingCompleted
       });
-      get().fetchInsights().catch(() => {});
-      get().fetchDailyContent().catch(() => {});
-      get().fetchPromptHistory().catch(() => {});
-      get().fetchNotifications().catch(() => {});
-      get().fetchSavedSearches().catch(() => {});
-      get().fetchSearchSuggestions().catch(() => {});
+      get().fetchInsights().catch(e => console.error('Initial insights fetch failed', e));
+      get().fetchDailyContent().catch(e => console.error('Initial daily content fetch failed', e));
+      get().fetchPromptHistory().catch(e => console.error('Initial prompt history fetch failed', e));
+      get().fetchNotifications().catch(e => console.error('Initial notifications fetch failed', e));
+      get().fetchSavedSearches().catch(e => console.error('Initial saved searches fetch failed', e));
+      get().fetchSearchSuggestions().catch(e => console.error('Initial search suggestions fetch failed', e));
       if (heartbeatInterval) clearInterval(heartbeatInterval);
       heartbeatInterval = setInterval(() => get().heartbeat(), 300000);
     } catch (error) {
+      console.error('Initialization failed', error);
       get().logout();
       set({ isLoading: false, isInitialized: false });
     }
@@ -129,7 +132,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       const user = await api<User>('/api/auth/heartbeat', { method: 'PUT', silent: true });
       set({ user });
       get().fetchNotifications();
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Heartbeat failed', e);
+    }
   },
   login: async (req) => {
     set({ isLoading: true });
@@ -179,7 +184,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       const url = `/api/journals/${journalId}/entries${params ? `?${params}` : ''}`;
       const entries = await api<Entry[]>(url);
       set({ entries });
-    } catch (error) {}
+    } catch (error) {
+      console.error(`Failed to fetch entries for journal ${journalId}`, error);
+    }
   },
   addJournal: async (journalData) => {
     set({ isSaving: true });
@@ -189,6 +196,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       toast.success('New sanctuary initialized');
     } catch (error) {
       set({ isSaving: false });
+      toast.error('Failed to create journal');
     }
   },
   deleteJournal: async (id) => {
@@ -198,7 +206,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         journals: state.journals.filter(j => j.id !== id),
         entries: state.entries.filter(e => e.journalId !== id)
       }));
-    } catch (error) {}
+      toast.success('Journal removed');
+    } catch (error) {
+      console.error('Failed to delete journal', error);
+      toast.error('Failed to remove journal');
+    }
   },
   addEntry: async (entryData) => {
     set({ isSaving: true });
@@ -212,6 +224,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().clearDraft(entry.journalId);
     } catch (error) {
       set({ isSaving: false });
+      toast.error('Failed to preserve entry');
     }
   },
   logout: () => {
@@ -229,16 +242,69 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   forgotPassword: async (email) => api('/api/auth/forgot', { method: 'POST', body: JSON.stringify({ email }) }),
   resetPassword: async (token, password) => api('/api/auth/reset', { method: 'POST', body: JSON.stringify({ token, password }) }),
-  deleteAccount: async () => { set({ isSaving: true }); try { await api('/api/auth/me', { method: 'DELETE' }); get().logout(); toast.success('Sanctuary purged.'); } catch (e) { set({ isSaving: false }); } },
-  setDraft: (journalId, draft) => { const next = { ...get().drafts, [journalId]: draft }; set({ drafts: next }); localStorage.setItem('lumina_drafts', JSON.stringify(next)); },
-  clearDraft: (journalId) => { const { [journalId]: _, ...rest } = get().drafts; set({ drafts: rest }); localStorage.setItem('lumina_drafts', JSON.stringify(rest)); },
-  fetchInsights: async () => { try { const data = await api<InsightData>('/api/insights'); set({ insightData: data }); } catch (e) {} },
-  fetchSearchSuggestions: async () => { try { const data = await api<{ titles: string[], tags: string[] }>('/api/search/suggestions'); set({ searchSuggestions: data }); } catch (e) {} },
-  addLegacyContact: async (data) => { try { const c = await api<LegacyContact>('/api/legacy-contacts', { method: 'POST', body: JSON.stringify(data) }); set(s => ({ legacyContacts: [...s.legacyContacts, c] })); } catch (e) {} },
-  removeLegacyContact: async (id) => { try { await api(`/api/legacy-contacts/${id}`, { method: 'DELETE' }); set(s => ({ legacyContacts: s.legacyContacts.filter(c => c.id !== id) })); } catch (e) {} },
-  fetchLegacyAuditLogs: async () => { try { const logs = await api<LegacyAuditLog[]>('/api/legacy/audit'); set({ legacyAuditLogs: logs }); } catch (e) {} },
-  fetchDailyContent: async (refresh = false) => { try { const data = await api<DailyContent>(`/api/ai/daily${refresh ? '?refresh=true' : ''}`); set({ dailyContent: data }); } catch (e) {} },
-  fetchPromptHistory: async () => { try { const data = await api<DailyContent[]>('/api/ai/prompts/history'); set({ promptHistory: data }); } catch (e) {} },
+  deleteAccount: async () => { 
+    set({ isSaving: true }); 
+    try { 
+      await api('/api/auth/me', { method: 'DELETE' }); 
+      get().logout(); 
+      toast.success('Sanctuary purged.'); 
+    } catch (e) { 
+      set({ isSaving: false }); 
+      console.error('Account deletion failed', e);
+    } 
+  },
+  setDraft: (journalId, draft) => { 
+    const next = { ...get().drafts, [journalId]: draft }; 
+    set({ drafts: next }); 
+    localStorage.setItem('lumina_drafts', JSON.stringify(next)); 
+  },
+  clearDraft: (journalId) => { 
+    const { [journalId]: _, ...rest } = get().drafts; 
+    set({ drafts: rest }); 
+    localStorage.setItem('lumina_drafts', JSON.stringify(rest)); 
+  },
+  fetchInsights: async () => { 
+    try { 
+      const data = await api<InsightData>('/api/insights'); 
+      set({ insightData: data }); 
+    } catch (e) { console.warn('Insights fetch failed', e); } 
+  },
+  fetchSearchSuggestions: async () => { 
+    try { 
+      const data = await api<{ titles: string[], tags: string[] }>('/api/search/suggestions'); 
+      set({ searchSuggestions: data }); 
+    } catch (e) { console.warn('Suggestions fetch failed', e); } 
+  },
+  addLegacyContact: async (data) => { 
+    try { 
+      const c = await api<LegacyContact>('/api/legacy-contacts', { method: 'POST', body: JSON.stringify(data) }); 
+      set(s => ({ legacyContacts: [...s.legacyContacts, c] })); 
+    } catch (e) { console.error('Failed to add contact', e); } 
+  },
+  removeLegacyContact: async (id) => { 
+    try { 
+      await api(`/api/legacy-contacts/${id}`, { method: 'DELETE' }); 
+      set(s => ({ legacyContacts: s.legacyContacts.filter(c => c.id !== id) })); 
+    } catch (e) { console.error('Failed to remove contact', e); } 
+  },
+  fetchLegacyAuditLogs: async () => { 
+    try { 
+      const logs = await api<LegacyAuditLog[]>('/api/legacy/audit'); 
+      set({ legacyAuditLogs: logs }); 
+    } catch (e) { console.warn('Audit logs fetch failed', e); } 
+  },
+  fetchDailyContent: async (refresh = false) => { 
+    try { 
+      const data = await api<DailyContent>(`/api/ai/daily${refresh ? '?refresh=true' : ''}`); 
+      set({ dailyContent: data }); 
+    } catch (e) { console.warn('Daily content fetch failed', e); } 
+  },
+  fetchPromptHistory: async () => { 
+    try { 
+      const data = await api<DailyContent[]>('/api/ai/prompts/history'); 
+      set({ promptHistory: data }); 
+    } catch (e) { console.warn('Prompt history fetch failed', e); } 
+  },
   generateContextualPrompt: async (journalId, templateId) => {
     try {
       return await api<DailyContent>('/api/ai/prompts/contextual', {
@@ -246,11 +312,22 @@ export const useAppStore = create<AppState>((set, get) => ({
         body: JSON.stringify({ journalId, templateId })
       });
     } catch (e) {
+      console.error('Contextual prompt generation failed', e);
       return { prompt: "Reflect on your current thoughts and intentions.", affirmation: "I am clear and focused." };
     }
   },
-  logExport: async (data) => { try { const log = await api<ExportLog>('/api/exports', { method: 'POST', body: JSON.stringify(data) }); set(s => ({ exportHistory: [log, ...s.exportHistory] })); } catch (e) {} },
-  fetchExportHistory: async () => { try { const logs = await api<ExportLog[]>('/api/exports'); set({ exportHistory: logs }); } catch (e) {} },
+  logExport: async (data) => { 
+    try { 
+      const log = await api<ExportLog>('/api/exports', { method: 'POST', body: JSON.stringify(data) }); 
+      set(s => ({ exportHistory: [log, ...s.exportHistory] })); 
+    } catch (e) { console.error('Export logging failed', e); } 
+  },
+  fetchExportHistory: async () => { 
+    try { 
+      const logs = await api<ExportLog[]>('/api/exports'); 
+      set({ exportHistory: logs }); 
+    } catch (e) { console.warn('Export history fetch failed', e); } 
+  },
   sendAiMessage: async (content) => {
     const userMsg: AiMessage = { id: crypto.randomUUID(), role: 'user', content, timestamp: new Date().toISOString() };
     const newHistory = [...get().aiChatHistory, userMsg];
@@ -268,18 +345,65 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (e) {
       set({ isSaving: false });
       toast.error("AI Assistant is offline");
+      console.error('AI chat message failed', e);
     }
   },
-  clearChatHistory: () => { localStorage.removeItem('lumina_chat'); set({ aiChatHistory: [] }); },
-  fetchNotifications: async () => { try { const notes = await api<AppNotification[]>('/api/notifications'); set({ notifications: notes, unreadCount: notes.filter(n => !n.isRead).length }); } catch (e) {} },
-  markNotificationRead: async (id) => { set(s => ({ notifications: s.notifications.map(n => n.id === id ? { ...n, isRead: true } : n), unreadCount: Math.max(0, s.unreadCount - 1) })); try { await api(`/api/notifications/${id}/read`, { method: 'PATCH' }); } catch (e) {} },
-  markAllNotificationsRead: async () => { set(s => ({ notifications: s.notifications.map(n => ({ ...n, isRead: true })), unreadCount: 0 })); try { await api('/api/notifications/read-all', { method: 'POST' }); } catch (e) {} },
-  deleteNotification: async (id) => { set(s => ({ notifications: s.notifications.filter(n => n.id !== id) })); try { await api(`/api/notifications/${id}`, { method: 'DELETE' }); } catch (e) {} },
-  addRecentSearch: (query) => { if (!query.trim()) return; const next = [query, ...get().recentSearches.filter(q => q !== query)].slice(0, 5); set({ recentSearches: next }); localStorage.setItem('lumina_recent_searches', JSON.stringify(next)); },
-  clearRecentSearches: () => { set({ recentSearches: [] }); localStorage.setItem('lumina_recent_searches', JSON.stringify([])); },
-  fetchSavedSearches: async () => { try { const data = await api<SavedSearch[]>('/api/searches'); set({ savedSearches: data }); } catch (e) {} },
-  saveSearch: async (data) => { try { const s = await api<SavedSearch>('/api/searches', { method: 'POST', body: JSON.stringify(data) }); set(st => ({ savedSearches: [s, ...st.savedSearches] })); } catch (e) {} },
-  deleteSavedSearch: async (id) => { try { await api(`/api/searches/${id}`, { method: 'DELETE' }); set(s => ({ savedSearches: s.savedSearches.filter(st => st.id !== id) })); } catch (e) {} },
+  clearChatHistory: () => { 
+    localStorage.removeItem('lumina_chat'); 
+    set({ aiChatHistory: [] }); 
+  },
+  fetchNotifications: async () => { 
+    try { 
+      const notes = await api<AppNotification[]>('/api/notifications'); 
+      set({ notifications: notes, unreadCount: notes.filter(n => !n.isRead).length }); 
+    } catch (e) { console.warn('Notifications fetch failed', e); } 
+  },
+  markNotificationRead: async (id) => { 
+    set(s => ({ notifications: s.notifications.map(n => n.id === id ? { ...n, isRead: true } : n), unreadCount: Math.max(0, s.unreadCount - 1) })); 
+    try { 
+      await api(`/api/notifications/${id}/read`, { method: 'PATCH' }); 
+    } catch (e) { console.error('Failed to mark notification read', e); } 
+  },
+  markAllNotificationsRead: async () => { 
+    set(s => ({ notifications: s.notifications.map(n => ({ ...n, isRead: true })), unreadCount: 0 })); 
+    try { 
+      await api('/api/notifications/read-all', { method: 'POST' }); 
+    } catch (e) { console.error('Failed to mark all notifications read', e); } 
+  },
+  deleteNotification: async (id) => { 
+    set(s => ({ notifications: s.notifications.filter(n => n.id !== id) })); 
+    try { 
+      await api(`/api/notifications/${id}`, { method: 'DELETE' }); 
+    } catch (e) { console.error('Failed to delete notification', e); } 
+  },
+  addRecentSearch: (query) => { 
+    if (!query.trim()) return; 
+    const next = [query, ...get().recentSearches.filter(q => q !== query)].slice(0, 5); 
+    set({ recentSearches: next }); 
+    localStorage.setItem('lumina_recent_searches', JSON.stringify(next)); 
+  },
+  clearRecentSearches: () => { 
+    set({ recentSearches: [] }); 
+    localStorage.setItem('lumina_recent_searches', JSON.stringify([])); 
+  },
+  fetchSavedSearches: async () => { 
+    try { 
+      const data = await api<SavedSearch[]>('/api/searches'); 
+      set({ savedSearches: data }); 
+    } catch (e) { console.warn('Saved searches fetch failed', e); } 
+  },
+  saveSearch: async (data) => { 
+    try { 
+      const s = await api<SavedSearch>('/api/searches', { method: 'POST', body: JSON.stringify(data) }); 
+      set(st => ({ savedSearches: [s, ...st.savedSearches] })); 
+    } catch (e) { console.error('Failed to save search', e); } 
+  },
+  deleteSavedSearch: async (id) => { 
+    try { 
+      await api(`/api/searches/${id}`, { method: 'DELETE' }); 
+      set(s => ({ savedSearches: s.savedSearches.filter(st => st.id !== id) })); 
+    } catch (e) { console.error('Failed to delete search', e); } 
+  },
   startTour: () => set({ isTourActive: true, tourStep: 0 }),
   nextTourStep: () => set(state => ({ tourStep: state.tourStep + 1 })),
   skipTour: async () => { set({ isTourActive: false, tourStep: 0 }); await get().updateProfile({ preferences: { onboardingCompleted: true } as any }); },

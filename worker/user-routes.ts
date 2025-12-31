@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { jwt, sign } from "hono/jwt";
-import { format, isSameDay } from "date-fns";
+import { isSameDay } from "date-fns";
 import type { Env } from './core-utils';
 import {
   UserAuthEntity, JournalEntity, EntryEntity,
@@ -9,7 +9,7 @@ import {
   SavedSearchEntity, PromptEntity
 } from "./entities";
 import { ok, bad, notFound } from './core-utils';
-import type { LoginRequest, RegisterRequest, DailyContent } from "@shared/types";
+import type { LoginRequest, RegisterRequest, DailyContent, User } from "@shared/types";
 const JWT_SECRET = "lumina-secret-key-change-this";
 async function hashPassword(password: string, salt: string) {
   const enc = new TextEncoder();
@@ -33,13 +33,10 @@ function generateDailyPrompt(recentContent: string): DailyContent {
   if (words.includes('fear') || words.includes('hard')) theme = 'challenge';
   if (words.includes('idea') || words.includes('art')) theme = 'creative';
   const selection = TEMPLATE_PROMPTS.find(p => p.theme === theme) || TEMPLATE_PROMPTS[0];
-  return {
-    prompt: selection.prompt,
-    affirmation: selection.affirmation
-  };
+  return { prompt: selection.prompt, affirmation: selection.affirmation };
 }
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
-  // Public Access Routes...
+  // Public Access Routes
   app.get('/api/public/legacy/:shareId', async (c) => {
     const shareId = c.req.param('shareId');
     const key = c.req.query('key');
@@ -60,13 +57,28 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       permissions: share.permissions,
       entries: share.passwordHash ? null : await EntryEntity.listByJournal(c.env, share.journalId, "public")
     };
-    await LegacyAuditLogEntity.create(c.env, {
-      id: crypto.randomUUID(), userId: share.userId, shareId: share.id,
-      journalId: share.journalId, recipientEmail: share.recipientEmail,
-      action: 'view', timestamp: new Date().toISOString()
-    });
     return ok(c, data);
   });
+  app.post('/api/public/legacy/:shareId/verify', async (c) => {
+    const shareId = c.req.param('shareId');
+    const { password } = await c.req.json();
+    const inst = new LegacyShareEntity(c.env, shareId);
+    if (!(await inst.exists())) return notFound(c);
+    const share = await inst.getState();
+    const hash = await hashPassword(password, "legacy-salt"); // Simplified salt for public verification
+    if (hash !== share.passwordHash) return bad(c, 'Incorrect password');
+    const journal = new JournalEntity(c.env, share.journalId);
+    const journalState = await journal.getState();
+    const data = {
+      journalTitle: journalState.title,
+      authorName: 'Verified Author',
+      passwordRequired: false,
+      permissions: share.permissions,
+      entries: await EntryEntity.listByJournal(c.env, share.journalId, "public")
+    };
+    return ok(c, data);
+  });
+  // Auth Routes
   app.post('/api/auth/register', async (c) => {
     const body = await c.req.json<RegisterRequest>();
     if (!body.email || !body.password || !body.name) return bad(c, 'Missing fields');
@@ -104,70 +116,198 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const token = await sign({ userId: userAuth.profile.id, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
     return ok(c, { user: updatedProfile, token });
   });
+  // Protected Routes Middleware
   app.use('/api/*', jwt({ secret: JWT_SECRET }));
   app.get('/api/auth/me', async (c) => {
     const payload = c.get('jwtPayload');
     const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
     return userAuth ? ok(c, userAuth.profile) : notFound(c);
   });
+  app.put('/api/auth/settings', async (c) => {
+    const payload = c.get('jwtPayload');
+    const updates = await c.req.json<Partial<User>>();
+    const userAuth = new UserAuthEntity(c.env, payload.email);
+    const current = await userAuth.getState();
+    const updated = { ...current.profile, ...updates };
+    await userAuth.patch({ profile: updated });
+    return ok(c, updated);
+  });
+  app.put('/api/auth/heartbeat', async (c) => {
+    const payload = c.get('jwtPayload');
+    const userAuth = new UserAuthEntity(c.env, payload.email);
+    const current = await userAuth.getState();
+    const updated = { ...current.profile, lastHeartbeatAt: new Date().toISOString() };
+    await userAuth.patch({ profile: updated });
+    return ok(c, updated);
+  });
+  app.delete('/api/auth/me', async (c) => {
+    const payload = c.get('jwtPayload');
+    await UserAuthEntity.purgeAllUserData(c.env, payload.userId, payload.email);
+    return ok(c, { message: 'Sanctuary purged' });
+  });
+  // AI & Daily Routes
   app.get('/api/ai/daily', async (c) => {
     const payload = c.get('jwtPayload');
     const refresh = c.req.query('refresh') === 'true';
     const history = await PromptEntity.listByUser(c.env, payload.userId);
     const todayPrompt = history.find(p => p.type === 'daily' && isSameDay(new Date(p.createdAt), new Date()));
-    if (todayPrompt && !refresh) {
-      return ok(c, { prompt: todayPrompt.prompt, affirmation: todayPrompt.affirmation });
-    }
+    if (todayPrompt && !refresh) return ok(c, todayPrompt);
     const recentContent = await EntryEntity.getRecentEntriesContent(c.env, payload.userId);
     const content = generateDailyPrompt(recentContent);
     const journals = await JournalEntity.listByUser(c.env, payload.userId);
-    const targetJournalId = journals[0]?.id;
     const newPrompt = await PromptEntity.create(c.env, {
-      id: crypto.randomUUID(),
-      userId: payload.userId,
-      prompt: content.prompt,
-      affirmation: content.affirmation,
-      targetJournalId,
-      type: 'daily',
-      createdAt: new Date().toISOString()
+      id: crypto.randomUUID(), userId: payload.userId, ...content,
+      targetJournalId: journals[0]?.id, type: 'daily', createdAt: new Date().toISOString()
     });
-    return ok(c, { prompt: newPrompt.prompt, affirmation: newPrompt.affirmation, targetJournalId });
-  });
-  app.post('/api/ai/prompts/contextual', async (c) => {
-    const payload = c.get('jwtPayload');
-    const { journalId, templateId } = await c.req.json();
-    const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
-    const content = entries.slice(0, 3).map(e => e.content).join("\n");
-    const suggestion = generateDailyPrompt(content);
-    await PromptEntity.create(c.env, {
-      id: crypto.randomUUID(),
-      userId: payload.userId,
-      prompt: suggestion.prompt,
-      affirmation: suggestion.affirmation,
-      targetJournalId: journalId,
-      type: 'contextual',
-      createdAt: new Date().toISOString()
-    });
-    return ok(c, suggestion);
+    return ok(c, newPrompt);
   });
   app.get('/api/ai/prompts/history', async (c) => {
     const payload = c.get('jwtPayload');
-    const items = await PromptEntity.listByUser(c.env, payload.userId);
-    return ok(c, items.filter(p => p.type === 'daily').slice(0, 10));
+    const history = await PromptEntity.listByUser(c.env, payload.userId);
+    return ok(c, history.filter(p => p.type === 'daily').slice(0, 10));
   });
+  app.post('/api/ai/prompts/contextual', async (c) => {
+    const payload = c.get('jwtPayload');
+    const { journalId } = await c.req.json();
+    const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
+    const content = entries.slice(0, 3).map(e => e.content).join("\n");
+    const suggestion = generateDailyPrompt(content);
+    return ok(c, suggestion);
+  });
+  // Journal & Entry CRUD
   app.get('/api/journals', async (c) => {
     const payload = c.get('jwtPayload');
-    const journals = await JournalEntity.listByUser(c.env, payload.userId);
-    const entries = await EntryEntity.listByUser(c.env, payload.userId);
-    const enriched = journals.map(j => {
-      const journalEntries = entries.filter(e => e.journalId === j.id);
-      return { ...j, entryCount: journalEntries.length, lastEntryAt: journalEntries[0]?.date };
-    });
-    return ok(c, enriched);
+    return ok(c, await JournalEntity.listByUser(c.env, payload.userId));
   });
+  app.post('/api/journals', async (c) => {
+    const payload = c.get('jwtPayload');
+    const body = await c.req.json();
+    const journal = await JournalEntity.create(c.env, {
+      id: crypto.randomUUID(), userId: payload.userId, ...body, createdAt: new Date().toISOString()
+    });
+    return ok(c, journal);
+  });
+  app.delete('/api/journals/:id', async (c) => {
+    const payload = c.get('jwtPayload');
+    const id = c.req.param('id');
+    const journal = new JournalEntity(c.env, id);
+    const state = await journal.getState();
+    if (state.userId !== payload.userId) return bad(c, 'Forbidden');
+    await JournalEntity.delete(c.env, id);
+    return ok(c, { id });
+  });
+  app.get('/api/entries/all', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await EntryEntity.listByUser(c.env, payload.userId));
+  });
+  app.get('/api/journals/:id/entries', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await EntryEntity.listByJournal(c.env, c.req.param('id'), payload.userId));
+  });
+  app.post('/api/journals/:id/entries', async (c) => {
+    const payload = c.get('jwtPayload');
+    const body = await c.req.json();
+    const entry = await EntryEntity.create(c.env, {
+      id: crypto.randomUUID(), userId: payload.userId, journalId: c.req.param('id'),
+      ...body, date: new Date().toISOString()
+    });
+    return ok(c, entry);
+  });
+  // Legacy circle & Transmissions
+  app.get('/api/legacy-contacts', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await LegacyContactEntity.listByUser(c.env, payload.userId));
+  });
+  app.post('/api/legacy-contacts', async (c) => {
+    const payload = c.get('jwtPayload');
+    const body = await c.req.json();
+    const contact = await LegacyContactEntity.create(c.env, {
+      id: crypto.randomUUID(), userId: payload.userId, ...body, status: 'verified'
+    });
+    return ok(c, contact);
+  });
+  app.delete('/api/legacy-contacts/:id', async (c) => {
+    const payload = c.get('jwtPayload');
+    const id = c.req.param('id');
+    const contact = new LegacyContactEntity(c.env, id);
+    if ((await contact.getState()).userId !== payload.userId) return bad(c, 'Forbidden');
+    await LegacyContactEntity.delete(c.env, id);
+    return ok(c, { id });
+  });
+  app.post('/api/legacy/generate-link', async (c) => {
+    const payload = c.get('jwtPayload');
+    const body = await c.req.json();
+    const share = await LegacyShareEntity.create(c.env, {
+      id: crypto.randomUUID(), userId: payload.userId, journalId: body.journalId,
+      recipientEmail: body.recipientEmail, accessKey: crypto.randomUUID(),
+      passwordHash: body.password ? await hashPassword(body.password, "legacy-salt") : undefined,
+      passwordHint: body.passwordHint, permissions: body.permissions,
+      viewCount: 0, createdAt: new Date().toISOString()
+    });
+    return ok(c, share);
+  });
+  app.get('/api/legacy/audit', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await LegacyAuditLogEntity.listByUser(c.env, payload.userId));
+  });
+  // Exports
+  app.get('/api/exports', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await ExportLogEntity.listByUser(c.env, payload.userId));
+  });
+  app.post('/api/exports', async (c) => {
+    const payload = c.get('jwtPayload');
+    const body = await c.req.json();
+    const log = await ExportLogEntity.create(c.env, {
+      id: crypto.randomUUID(), userId: payload.userId, ...body, timestamp: new Date().toISOString()
+    });
+    return ok(c, log);
+  });
+  // Notifications
   app.get('/api/notifications', async (c) => {
     const payload = c.get('jwtPayload');
-    const notes = await NotificationEntity.listByUser(c.env, payload.userId);
-    return ok(c, notes);
+    return ok(c, await NotificationEntity.listByUser(c.env, payload.userId));
+  });
+  app.patch('/api/notifications/:id/read', async (c) => {
+    const id = c.req.param('id');
+    await new NotificationEntity(c.env, id).patch({ isRead: true });
+    return ok(c, { id });
+  });
+  app.post('/api/notifications/read-all', async (c) => {
+    const payload = c.get('jwtPayload');
+    await NotificationEntity.markAllAsRead(c.env, payload.userId);
+    return ok(c, { success: true });
+  });
+  // Search
+  app.get('/api/searches', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await SavedSearchEntity.listByUser(c.env, payload.userId));
+  });
+  app.post('/api/searches', async (c) => {
+    const payload = c.get('jwtPayload');
+    const body = await c.req.json();
+    const s = await SavedSearchEntity.create(c.env, {
+      id: crypto.randomUUID(), userId: payload.userId, ...body, createdAt: new Date().toISOString()
+    });
+    return ok(c, s);
+  });
+  app.get('/api/search/suggestions', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await EntryEntity.getSuggestions(c.env, payload.userId));
+  });
+  // Activity stream aggregation
+  app.get('/api/activity/stream', async (c) => {
+    const payload = c.get('jwtPayload');
+    const [exports, audits, prompts] = await Promise.all([
+      ExportLogEntity.listByUser(c.env, payload.userId),
+      LegacyAuditLogEntity.listByUser(c.env, payload.userId),
+      PromptEntity.listByUser(c.env, payload.userId)
+    ]);
+    const stream = [
+      ...exports.map(e => ({ id: e.id, type: 'export' as const, title: 'Export Generated', message: `Journal archive exported as ${e.format.toUpperCase()}`, timestamp: e.timestamp })),
+      ...audits.map(a => ({ id: a.id, type: 'transmission' as const, title: 'Archive Accessed', message: `Archive viewed by ${a.recipientEmail}`, timestamp: a.timestamp })),
+      ...prompts.map(p => ({ id: p.id, type: 'system' as const, title: 'Daily Prompt', message: p.prompt, timestamp: p.createdAt }))
+    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return ok(c, stream.slice(0, 50));
   });
 }

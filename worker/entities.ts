@@ -71,7 +71,9 @@ export class PromptEntity extends IndexedEntity<PromptRecord> {
   };
   static async listByUser(env: Env, userId: string): Promise<PromptRecord[]> {
     const { items } = await this.list(env, null, 100);
-    return items.filter(p => p.userId === userId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return items
+      .filter(p => p.userId === userId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
   static async deleteManyByUser(env: Env, userId: string) {
     const items = await this.listByUser(env, userId);
@@ -124,7 +126,9 @@ export class EntryEntity extends IndexedEntity<Entry> {
   }
   static async listByUser(env: Env, userId: string): Promise<Entry[]> {
     const { items } = await this.list(env, null, 1000);
-    return items.filter(e => e.userId === userId);
+    return items
+      .filter(e => e.userId === userId)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
   static async getRecentEntriesContent(env: Env, userId: string, days: number = 7): Promise<string> {
     const entries = await this.listByUser(env, userId);
@@ -195,7 +199,9 @@ export class ExportLogEntity extends IndexedEntity<ExportLog> {
   };
   static async listByUser(env: Env, userId: string): Promise<ExportLog[]> {
     const { items } = await this.list(env, null, 1000);
-    return items.filter(l => l.userId === userId).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return items
+      .filter(l => l.userId === userId)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }
   static async deleteManyByUser(env: Env, userId: string) {
     const items = await this.listByUser(env, userId);
@@ -216,7 +222,9 @@ export class LegacyAuditLogEntity extends IndexedEntity<LegacyAuditLog> {
   };
   static async listByUser(env: Env, userId: string): Promise<LegacyAuditLog[]> {
     const { items } = await this.list(env, null, 1000);
-    return items.filter(l => l.userId === userId).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return items
+      .filter(l => l.userId === userId)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }
   static async deleteManyByUser(env: Env, userId: string) {
     const items = await this.listByUser(env, userId);
@@ -242,9 +250,9 @@ export class NotificationEntity extends IndexedEntity<AppNotification> {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
   static async markAllAsRead(env: Env, userId: string): Promise<void> {
-    const { items } = await this.list(env, null, 1000);
-    const userNotes = items.filter(n => n.userId === userId && !n.isRead);
-    await Promise.all(userNotes.map(n => new NotificationEntity(env, n.id).patch({ isRead: true })));
+    const notes = await this.listByUser(env, userId);
+    const unread = notes.filter(n => !n.isRead);
+    await Promise.all(unread.map(n => new NotificationEntity(env, n.id).patch({ isRead: true })));
   }
   static async deleteManyByUser(env: Env, userId: string) {
     const items = await this.listByUser(env, userId);
@@ -264,7 +272,9 @@ export class SavedSearchEntity extends IndexedEntity<SavedSearch> {
   };
   static async listByUser(env: Env, userId: string): Promise<SavedSearch[]> {
     const { items } = await this.list(env, null, 100);
-    return items.filter(s => s.userId === userId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return items
+      .filter(s => s.userId === userId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
   static async deleteManyByUser(env: Env, userId: string) {
     const items = await this.listByUser(env, userId);
