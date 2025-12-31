@@ -1,138 +1,96 @@
-// Home page of the app.
-// Currently a demo placeholder "please wait" screen.
-// Replace this file with your actual app UI. Do not delete it to use some other file as homepage. Simply replace the entire contents of this file.
-
-import { useEffect, useMemo, useState } from 'react'
-import { Sparkles } from 'lucide-react'
-
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { HAS_TEMPLATE_DEMO, TemplateDemo } from '@/components/TemplateDemo'
-import { Button } from '@/components/ui/button'
-import { Toaster, toast } from '@/components/ui/sonner'
-
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { Sparkles, ArrowRight, BookOpen, ShieldCheck, HeartPulse } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { motion } from 'framer-motion';
 export function HomePage() {
-  const [coins, setCoins] = useState(0)
-  const [isRunning, setIsRunning] = useState(false)
-  const [startedAt, setStartedAt] = useState<number | null>(null)
-  const [elapsedMs, setElapsedMs] = useState(0)
-
-  useEffect(() => {
-    if (!isRunning || startedAt === null) return
-
-    const t = setInterval(() => {
-      setElapsedMs(Date.now() - startedAt)
-    }, 250)
-
-    return () => clearInterval(t)
-  }, [isRunning, startedAt])
-
-  const formatted = useMemo(() => formatDuration(elapsedMs), [elapsedMs])
-
-  const onPleaseWait = () => {
-    setCoins((c) => c + 1)
-
-    if (!isRunning) {
-      // Resume from the current elapsed time
-      setStartedAt(Date.now() - elapsedMs)
-      setIsRunning(true)
-      toast.success('Building your app…', {
-        description: "Hang tight — we're setting everything up.",
-      })
-      return
-    }
-
-    setIsRunning(false)
-    toast.info('Still working…', {
-      description: 'You can come back in a moment.',
-    })
-  }
-
-  const onReset = () => {
-    setCoins(0)
-    setIsRunning(false)
-    setStartedAt(null)
-    setElapsedMs(0)
-    toast('Reset complete')
-  }
-
-  const onAddCoin = () => {
-    setCoins((c) => c + 1)
-    toast('Coin added')
-  }
-
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4 overflow-hidden relative">
+    <div className="min-h-screen bg-[#FDFCFB] text-stone-900 selection:bg-stone-200">
       <ThemeToggle />
-      <div className="absolute inset-0 bg-gradient-rainbow opacity-10 dark:opacity-20 pointer-events-none" />
-
-      <div className="text-center space-y-8 relative z-10 animate-fade-in w-full">
-        <div className="flex justify-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-primary floating">
-            <Sparkles className="w-8 h-8 text-white rotating" />
+      {/* Navigation */}
+      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="h-10 w-10 rounded-xl bg-stone-900 flex items-center justify-center text-white">
+            <Sparkles size={20} />
           </div>
+          <span className="text-2xl font-bold tracking-tighter">Lumina</span>
         </div>
-
-        <div className="space-y-3">
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-balance leading-tight">
-            Creating your <span className="text-gradient">app</span>
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto text-pretty">
-            Your application would be ready soon.
-          </p>
+        <div className="hidden md:flex gap-8 text-sm font-medium text-stone-500">
+          <a href="#features" className="hover:text-stone-900 transition-colors">Features</a>
+          <a href="#legacy" className="hover:text-stone-900 transition-colors">Legacy</a>
+          <a href="#pricing" className="hover:text-stone-900 transition-colors">Pricing</a>
         </div>
-
-        {HAS_TEMPLATE_DEMO ? (
-          <div className="max-w-5xl mx-auto text-left">
-            <TemplateDemo />
+        <Button asChild variant="outline" className="rounded-full border-stone-200">
+          <Link to="/dashboard">Log In</Link>
+        </Button>
+      </nav>
+      <main>
+        {/* Hero Section */}
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-32 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="space-y-6"
+          >
+            <h1 className="text-6xl md:text-8xl font-serif font-medium tracking-tight text-stone-900 leading-none">
+              Write today. <br />
+              <span className="italic text-stone-400">Reflect intelligently.</span>
+            </h1>
+            <p className="text-xl text-stone-500 max-w-2xl mx-auto font-light leading-relaxed">
+              Lumina is a minimalist sanctuary for your thoughts, enhanced by AI to uncover patterns in your growth and preserve your legacy.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
+              <Button asChild size="lg" className="rounded-full px-8 py-6 text-lg bg-stone-900 text-white hover:bg-stone-800 shadow-xl shadow-stone-200">
+                <Link to="/dashboard">
+                  Start Writing <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
+              </Button>
+              <Button variant="ghost" size="lg" className="rounded-full px-8 py-6 text-lg text-stone-600">
+                See how it works
+              </Button>
+            </div>
+          </motion.div>
+        </section>
+        {/* Feature Grid */}
+        <section id="features" className="bg-stone-50 py-24">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+              <div className="space-y-4 p-8 rounded-3xl bg-white border border-stone-100 shadow-sm">
+                <div className="h-12 w-12 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center">
+                  <BookOpen size={24} />
+                </div>
+                <h3 className="text-xl font-semibold">Structured Journaling</h3>
+                <p className="text-stone-500 font-light">
+                  Templates designed for clarity, from gratitude practices to high-performance fitness tracking.
+                </p>
+              </div>
+              <div className="space-y-4 p-8 rounded-3xl bg-white border border-stone-100 shadow-sm">
+                <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <ShieldCheck size={24} />
+                </div>
+                <h3 className="text-xl font-semibold">AI Pattern Sensing</h3>
+                <p className="text-stone-500 font-light">
+                  Our intelligence layer subtly identifies mood shifts and recurring topics without intruding on your space.
+                </p>
+              </div>
+              <div className="space-y-4 p-8 rounded-3xl bg-white border border-stone-100 shadow-sm">
+                <div className="h-12 w-12 rounded-2xl bg-stone-100 text-stone-900 flex items-center justify-center">
+                  <HeartPulse size={24} />
+                </div>
+                <h3 className="text-xl font-semibold">Legacy Transmission</h3>
+                <p className="text-stone-500 font-light">
+                  Securely share your life's wisdom with loved ones through scheduled or inactivity-triggered release.
+                </p>
+              </div>
+            </div>
           </div>
-        ) : (
-          <>
-            <div className="flex justify-center gap-4">
-              <Button
-                size="lg"
-                onClick={onPleaseWait}
-                className="btn-gradient px-8 py-4 text-lg font-semibold hover:-translate-y-0.5 transition-all duration-200"
-                aria-live="polite"
-              >
-                Please Wait
-              </Button>
-            </div>
-
-            <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-              <div>
-                Time elapsed:{' '}
-                <span className="font-medium tabular-nums text-foreground">{formatted}</span>
-              </div>
-              <div>
-                Coins:{' '}
-                <span className="font-medium tabular-nums text-foreground">{coins}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={onReset}>
-                Reset
-              </Button>
-              <Button variant="outline" size="sm" onClick={onAddCoin}>
-                Add Coin
-              </Button>
-            </div>
-          </>
-        )}
-      </div>
-
-      <footer className="absolute bottom-8 text-center text-muted-foreground/80">
-        <p>Powered by Cloudflare</p>
+        </section>
+      </main>
+      <footer className="py-12 border-t border-stone-100 text-center text-stone-400 text-sm">
+        <p>&copy; 2024 Lumina Journaling Platform. All rights reserved.</p>
       </footer>
-
-      <Toaster richColors closeButton />
     </div>
-  )
+  );
 }

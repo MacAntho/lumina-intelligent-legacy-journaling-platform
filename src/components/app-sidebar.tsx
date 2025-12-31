@@ -1,72 +1,108 @@
-/* This is a demo sidebar. **COMPULSORY** Edit this file to customize the sidebar OR remove it from appLayout OR don't use appLayout at all */
 import React from "react";
-import { Home, Layers, Compass, Star, Settings, LifeBuoy } from "lucide-react";
+import { 
+  LayoutDashboard, 
+  BookText, 
+  BarChart3, 
+  Heart, 
+  Settings, 
+  PlusCircle,
+  ChevronRight,
+  Sparkles
+} from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { useAppStore } from "@/lib/store";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarHeader,
-  SidebarSeparator,
-  SidebarInput,
   SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarMenuAction,
-  SidebarMenuBadge,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
-
+import { cn } from "@/lib/utils";
 export function AppSidebar(): JSX.Element {
+  const journals = useAppStore((s) => s.journals);
+  const location = useLocation();
   return (
-    <Sidebar>
-      <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1">
-          <div className="h-6 w-6 rounded-md bg-gradient-to-br from-indigo-500 to-purple-500" />
-          <span className="text-sm font-medium">Demo Sidebar</span>
-        </div>
-        <SidebarInput placeholder="Search" />
+    <Sidebar className="border-r border-stone-200 dark:border-stone-800">
+      <SidebarHeader className="p-4">
+        <Link to="/" className="flex items-center gap-3 px-2">
+          <div className="h-8 w-8 rounded-lg bg-stone-900 flex items-center justify-center text-white">
+            <Sparkles size={18} />
+          </div>
+          <span className="text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-100">Lumina</span>
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive>
-                <a href="#"><Home /> <span>Home</span></a>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild>
-                <a href="#"><Layers /> <span>Projects</span></a>
-              </SidebarMenuButton>
-              <SidebarMenuAction>
-                <Star className="size-4" />
-              </SidebarMenuAction>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild>
-                <a href="#"><Compass /> <span>Explore</span></a>
+              <SidebarMenuButton asChild isActive={location.pathname === "/dashboard"}>
+                <Link to="/dashboard">
+                  <LayoutDashboard className="size-4" />
+                  <span>Dashboard</span>
+                </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
-
-        <SidebarSeparator />
-
+        <SidebarSeparator className="opacity-50" />
         <SidebarGroup>
-          <SidebarGroupLabel>Quick Links</SidebarGroupLabel>
+          <SidebarGroupLabel className="px-4 text-xs font-medium uppercase tracking-wider text-stone-500">
+            Journals
+          </SidebarGroupLabel>
+          <SidebarMenu className="mt-2">
+            {journals.map((journal) => (
+              <SidebarMenuItem key={journal.id}>
+                <SidebarMenuButton 
+                  asChild 
+                  isActive={location.pathname === `/journal/${journal.id}`}
+                >
+                  <Link to={`/journal/${journal.id}`} className="flex items-center gap-3">
+                    <BookText className="size-4" />
+                    <span className="truncate">{journal.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel className="px-4 text-xs font-medium uppercase tracking-wider text-stone-500">
+            Analytics
+          </SidebarGroupLabel>
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton asChild>
-                <a href="#"><Star /> <span>Starred</span></a>
+                <a href="#"><BarChart3 className="size-4" /> <span>Insights</span></a>
               </SidebarMenuButton>
-              <SidebarMenuBadge>5</SidebarMenuBadge>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild>
+                <a href="#"><Heart className="size-4" /> <span>Legacy Plan</span></a>
+              </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <div className="px-2 text-xs text-muted-foreground">A simple shadcn sidebar</div>
+      <SidebarFooter className="p-4">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton className="w-full justify-start gap-3 bg-stone-100 dark:bg-stone-800/50 border border-stone-200 dark:border-stone-700 hover:bg-stone-200">
+              <PlusCircle className="size-4" />
+              <span className="font-medium text-stone-900 dark:text-stone-100">New Journal</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild className="mt-2 text-stone-500">
+              <a href="#"><Settings className="size-4" /> <span>Settings</span></a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );

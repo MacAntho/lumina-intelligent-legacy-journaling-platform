@@ -12,17 +12,26 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { RouteErrorBoundary } from '@/components/RouteErrorBoundary';
 import '@/index.css'
 import { HomePage } from '@/pages/HomePage'
-
+import { Dashboard } from '@/pages/Dashboard'
+import { JournalDetail } from '@/pages/JournalDetail'
 const queryClient = new QueryClient();
-
 const router = createBrowserRouter([
   {
     path: "/",
     element: <HomePage />,
     errorElement: <RouteErrorBoundary />,
   },
+  {
+    path: "/dashboard",
+    element: <Dashboard />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/journal/:id",
+    element: <JournalDetail />,
+    errorElement: <RouteErrorBoundary />,
+  }
 ]);
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
@@ -32,4 +41,3 @@ createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </StrictMode>,
 )
-   
