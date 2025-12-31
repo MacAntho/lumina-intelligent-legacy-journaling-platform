@@ -5,7 +5,7 @@ import { ok, bad } from './core-utils';
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   // JOURNALS
   app.get('/api/journals', async (c) => {
-    const page = await JournalEntity.list(c.env);
+    const page = await JournalEntity.list(c.env, null, 100);
     return ok(c, page.items);
   });
   app.post('/api/journals', async (c) => {
@@ -47,7 +47,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   // LEGACY CONTACTS
   app.get('/api/legacy-contacts', async (c) => {
-    const page = await LegacyContactEntity.list(c.env);
+    const page = await LegacyContactEntity.list(c.env, null, 100);
     return ok(c, page.items);
   });
   app.post('/api/legacy-contacts', async (c) => {

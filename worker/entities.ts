@@ -4,6 +4,7 @@ export class UserEntity extends IndexedEntity<User> {
   static readonly entityName = "user";
   static readonly indexName = "users";
   static readonly initialState: User = { id: "", name: "", email: "" };
+  static readonly seedData: readonly User[] = [{id: 'u1', name: 'Julian Stone', email: 'julian@lumina.io'}];
 }
 export class JournalEntity extends IndexedEntity<Journal> {
   static readonly entityName = "journal";
@@ -15,6 +16,7 @@ export class JournalEntity extends IndexedEntity<Journal> {
     type: "reflective",
     createdAt: "",
   };
+  static readonly seedData: readonly Journal[] = [];
 }
 export class EntryEntity extends IndexedEntity<Entry> {
   static readonly entityName = "entry";
@@ -26,6 +28,7 @@ export class EntryEntity extends IndexedEntity<Entry> {
     date: "",
     mood: "Normal",
   };
+  static readonly seedData: readonly Entry[] = [];
   /**
    * Fetch all entries for a specific journal.
    */
@@ -45,4 +48,5 @@ export class LegacyContactEntity extends IndexedEntity<LegacyContact> {
     email: "",
     status: "pending"
   };
+  static readonly seedData: readonly LegacyContact[] = [];
 }

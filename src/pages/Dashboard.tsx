@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { BookText, Plus, Calendar, TrendingUp, Trash2, Loader2, Library } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -31,9 +31,10 @@ export function Dashboard() {
     description: '', 
     type: 'reflective' 
   });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     initialize();
-  }, [initialize]);
+  }, []);
   const handleCreate = async () => {
     if (!newJournal.title) return;
     await addJournal(newJournal);
@@ -55,9 +56,10 @@ export function Dashboard() {
               </Button>
             </DialogTrigger>
             <DialogContent className="rounded-3xl sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle className="text-2xl font-serif">Create New Journal</DialogTitle>
-              </DialogHeader>
+                <DialogHeader>
+                  <DialogTitle className="text-2xl font-serif">Create New Journal</DialogTitle>
+                  <DialogDescription className="text-sm text-stone-500 mt-2">Create a new journal to organize your reflections and legacy.</DialogDescription>
+                </DialogHeader>
               <div className="grid gap-6 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="title">Journal Title</Label>
@@ -70,9 +72,9 @@ export function Dashboard() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="type">Journal Type</Label>
-                  <Select 
-                    onValueChange={(v: JournalType) => setNewJournal(prev => ({ ...prev, type: v }))} 
-                    defaultValue="reflective"
+                  <Select
+                    onValueChange={(v: JournalType) => setNewJournal(prev => ({ ...prev, type: v }))}
+                    value={newJournal.type}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select type" />
