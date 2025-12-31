@@ -1,11 +1,31 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { BrainCircuit, Sparkles, TrendingUp, Zap } from 'lucide-react';
+import { BrainCircuit, Sparkles, TrendingUp, Zap, Loader2 } from 'lucide-react';
+
 export function Insights() {
   const insightData = useAppStore((s) => s.insightData);
+  const fetchInsights = useAppStore((s) => s.fetchInsights);
+
+  React.useEffect(() => {
+    if (!insightData) {
+      fetchInsights();
+    }
+  }, [insightData, fetchInsights]);
+
+  if (!insightData) {
+    return (
+      <AppLayout container>
+        <div className="flex items-center justify-center h-64 py-20">
+          <Loader2 className="animate-spin mr-2 h-8 w-8 text-amber-600" />
+          <span className="text-lg text-stone-500">Loading your insights...</span>
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout container>
       <div className="space-y-12 pb-20">
@@ -28,7 +48,7 @@ export function Insights() {
             </CardHeader>
             <CardContent className="h-[300px] w-full pt-4">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={insightData.moodTrends}>
+                <AreaChart data={insightData.moodTrends || []}>
                   <defs>
                     <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#d97706" stopOpacity={0.1}/>
@@ -38,7 +58,7 @@ export function Insights() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e7e5e4" />
                   <XAxis dataKey="date" stroke="#a8a29e" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis hide domain={[0, 6]} />
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
                   />
                   <Area type="monotone" dataKey="score" stroke="#d97706" strokeWidth={2} fillOpacity={1} fill="url(#colorScore)" />
@@ -54,11 +74,11 @@ export function Insights() {
             </CardHeader>
             <CardContent className="h-[300px] w-full pt-4">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={insightData.writingFrequency}>
+                <BarChart data={insightData.writingFrequency || []}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e7e5e4" />
                   <XAxis dataKey="day" stroke="#a8a29e" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis hide />
-                  <Tooltip 
+                  <Tooltip
                     cursor={{ fill: '#f5f5f4' }}
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
                   />
@@ -73,8 +93,8 @@ export function Insights() {
             <Sparkles size={22} className="text-amber-500" /> Emerging Themes
           </h2>
           <div className="flex flex-wrap gap-4">
-            {insightData.topTopics.map((topic) => (
-              <div 
+            {insightData?.topTopics?.map((topic) => (
+              <div
                 key={topic.text}
                 className="px-6 py-4 rounded-2xl bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 shadow-sm flex flex-col items-center justify-center min-w-[120px]"
               >
@@ -99,3 +119,4 @@ export function Insights() {
     </AppLayout>
   );
 }
+//
