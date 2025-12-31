@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BookText, Plus, Calendar, Sparkles, TrendingUp, Trash2 } from 'lucide-react';
+import { BookText, Plus, Calendar, Sparkles, TrendingUp, Trash2, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
@@ -13,18 +13,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 export function Dashboard() {
   const journals = useAppStore((s) => s.journals);
+  const isLoading = useAppStore((s) => s.isLoading);
+  const isSaving = useAppStore((s) => s.isSaving);
   const user = useAppStore((s) => s.user);
   const addJournal = useAppStore((s) => s.addJournal);
   const deleteJournal = useAppStore((s) => s.deleteJournal);
+  const initialize = useAppStore((s) => s.initialize);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [newJournal, setNewJournal] = useState<{ title: string; description: string; type: 'reflective' | 'fitness' | 'gratitude' | 'legacy' }>({
-    title: '',
-    description: '',
-    type: 'reflective'
-  });
-  const handleCreate = () => {
+  const [newJournal, setNewJournal] = useState({ title: '', description: '', type: 'reflective' });
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+  const handleCreate = async () => {
     if (!newJournal.title) return;
-    addJournal(newJournal);
+    await addJournal(newJournal);
     setNewJournal({ title: '', description: '', type: 'reflective' });
     setIsCreateOpen(false);
   };
@@ -49,10 +51,10 @@ export function Dashboard() {
               <div className="grid gap-6 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="title">Journal Title</Label>
-                  <Input 
-                    id="title" 
-                    placeholder="e.g. 2024 Travel Log" 
-                    value={newJournal.title} 
+                  <Input
+                    id="title"
+                    placeholder="e.g. 2024 Travel Log"
+                    value={newJournal.title}
                     onChange={(e) => setNewJournal(prev => ({ ...prev, title: e.target.value }))}
                   />
                 </div>
@@ -72,63 +74,44 @@ export function Dashboard() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="desc">Description</Label>
-                  <Input 
-                    id="desc" 
-                    placeholder="Briefly describe its purpose" 
-                    value={newJournal.description} 
+                  <Input
+                    id="desc"
+                    placeholder="Briefly describe its purpose"
+                    value={newJournal.description}
                     onChange={(e) => setNewJournal(prev => ({ ...prev, description: e.target.value }))}
                   />
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={handleCreate} className="w-full rounded-xl bg-stone-900 text-white">Initialize Journal</Button>
+                <Button onClick={handleCreate} disabled={isSaving} className="w-full rounded-xl bg-stone-900 text-white">
+                  {isSaving ? <Loader2 className="animate-spin mr-2" size={16} /> : null}
+                  {isSaving ? 'Initializing...' : 'Initialize Journal'}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </header>
-        <div className="relative overflow-hidden rounded-3xl bg-stone-100 dark:bg-stone-800/50 p-8 border border-stone-200 dark:border-stone-700">
-          <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
-            <div className="h-14 w-14 rounded-2xl bg-white dark:bg-stone-900 shadow-sm flex items-center justify-center text-amber-600">
-              <Sparkles size={28} />
-            </div>
-            <div className="text-center md:text-left">
-              <h2 className="text-lg font-medium text-stone-900 dark:text-stone-100">Daily Insight Prompt</h2>
-              <p className="text-stone-500 font-light italic mt-1">"What is one thing you learned about yourself today that surprised you?"</p>
-            </div>
-            <div className="ml-auto">
-              <Button variant="outline" className="rounded-full border-stone-300 dark:border-stone-600">
-                Answer now
-              </Button>
-            </div>
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-48 rounded-3xl bg-stone-100 animate-pulse" />
+            ))}
           </div>
-          <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-            <Sparkles size={120} />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          <Card className="lg:col-span-1 rounded-3xl border-stone-100 dark:border-stone-800 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-sm font-medium text-stone-500 uppercase tracking-wider flex items-center gap-2">
-                <TrendingUp size={16} /> Consistency
-              </CardTitle>
-            </CardHeader>
-            <div className="px-6 pb-6">
-              <div className="text-5xl font-serif font-medium">12</div>
-              <p className="text-sm text-stone-500 mt-2">Days streak in May</p>
-              <div className="mt-6 flex gap-1 h-8">
-                {[1, 1, 0, 1, 1, 1, 1].map((active, i) => (
-                  <div key={i} className={`flex-1 rounded-md ${active ? 'bg-stone-900 dark:bg-stone-200' : 'bg-stone-200 dark:bg-stone-800'}`} />
-                ))}
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            <Card className="lg:col-span-1 rounded-3xl border-stone-100 dark:border-stone-800 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-stone-500 uppercase tracking-wider flex items-center gap-2">
+                  <TrendingUp size={16} /> Consistency
+                </CardTitle>
+              </CardHeader>
+              <div className="px-6 pb-6">
+                <div className="text-5xl font-serif font-medium">{journals.length > 0 ? 'Active' : '0'}</div>
+                <p className="text-sm text-stone-500 mt-2">Journals protected</p>
               </div>
-            </div>
-          </Card>
-          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
-            {journals.length === 0 ? (
-              <div className="col-span-full py-20 text-center border-2 border-dashed border-stone-200 rounded-3xl text-stone-400">
-                No journals found. Create your first sanctuary above.
-              </div>
-            ) : (
-              journals.map((journal) => (
+            </Card>
+            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {journals.map((journal) => (
                 <div key={journal.id} className="relative group">
                   <Link to={`/journal/${journal.id}`}>
                     <Card className="h-full rounded-3xl border-stone-100 dark:border-stone-800 shadow-sm hover:shadow-md hover:border-stone-300 transition-all group overflow-hidden">
@@ -166,7 +149,7 @@ export function Dashboard() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
-                          <AlertDialogAction 
+                          <AlertDialogAction
                             onClick={() => deleteJournal(journal.id)}
                             className="bg-red-500 text-white hover:bg-red-600 rounded-xl"
                           >
@@ -177,17 +160,17 @@ export function Dashboard() {
                     </AlertDialog>
                   </div>
                 </div>
-              ))
-            )}
-            <button 
-              onClick={() => setIsCreateOpen(true)}
-              className="h-full border-2 border-dashed border-stone-200 dark:border-stone-800 rounded-3xl flex flex-col items-center justify-center gap-3 py-10 text-stone-400 hover:text-stone-600 hover:border-stone-400 transition-colors"
-            >
-              <Plus size={32} strokeWidth={1.5} />
-              <span className="font-medium">Create New Journal</span>
-            </button>
+              ))}
+              <button
+                onClick={() => setIsCreateOpen(true)}
+                className="h-full border-2 border-dashed border-stone-200 dark:border-stone-800 rounded-3xl flex flex-col items-center justify-center gap-3 py-10 text-stone-400 hover:text-stone-600 hover:border-stone-400 transition-colors min-h-[180px]"
+              >
+                <Plus size={32} strokeWidth={1.5} />
+                <span className="font-medium">Create New Sanctuary</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </AppLayout>
   );

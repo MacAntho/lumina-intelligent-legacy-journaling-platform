@@ -1,75 +1,66 @@
 import { Hono } from "hono";
 import type { Env } from './core-utils';
-import { UserEntity, ChatBoardEntity } from "./entities";
-import { ok, bad, notFound, isStr } from './core-utils';
-
+import { UserEntity, JournalEntity, EntryEntity } from "./entities";
+import { ok, bad, notFound } from './core-utils';
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
-  app.get('/api/test', (c) => c.json({ success: true, data: { name: 'CF Workers Demo' }}));
-
-  // USERS
-  app.get('/api/users', async (c) => {
-    await UserEntity.ensureSeed(c.env);
-    const cq = c.req.query('cursor');
-    const lq = c.req.query('limit');
-    const page = await UserEntity.list(c.env, cq ?? null, lq ? Math.max(1, (Number(lq) | 0)) : undefined);
-    return ok(c, page);
+  // JOURNALS
+  app.get('/api/journals', async (c) => {
+    const page = await JournalEntity.list(c.env);
+    return ok(c, page.items);
   });
-
-  app.post('/api/users', async (c) => {
-    const { name } = (await c.req.json()) as { name?: string };
-    if (!name?.trim()) return bad(c, 'name required');
-    return ok(c, await UserEntity.create(c.env, { id: crypto.randomUUID(), name: name.trim() }));
+  app.post('/api/journals', async (c) => {
+    const body = await c.req.json();
+    if (!body.title?.trim()) return bad(c, 'title required');
+    const journal = await JournalEntity.create(c.env, {
+      ...body,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString()
+    });
+    return ok(c, journal);
   });
-
-  // CHATS
-  app.get('/api/chats', async (c) => {
-    await ChatBoardEntity.ensureSeed(c.env);
-    const cq = c.req.query('cursor');
-    const lq = c.req.query('limit');
-    const page = await ChatBoardEntity.list(c.env, cq ?? null, lq ? Math.max(1, (Number(lq) | 0)) : undefined);
-    return ok(c, page);
+  app.delete('/api/journals/:id', async (c) => {
+    const id = c.req.param('id');
+    const deleted = await JournalEntity.delete(c.env, id);
+    return ok(c, { id, deleted });
   });
-
-  app.post('/api/chats', async (c) => {
-    const { title } = (await c.req.json()) as { title?: string };
-    if (!title?.trim()) return bad(c, 'title required');
-    const created = await ChatBoardEntity.create(c.env, { id: crypto.randomUUID(), title: title.trim(), messages: [] });
-    return ok(c, { id: created.id, title: created.title });
+  // ENTRIES
+  app.get('/api/journals/:id/entries', async (c) => {
+    const journalId = c.req.param('id');
+    const entries = await EntryEntity.listByJournal(c.env, journalId);
+    return ok(c, entries);
   });
-
-  // MESSAGES
-  app.get('/api/chats/:chatId/messages', async (c) => {
-    const chat = new ChatBoardEntity(c.env, c.req.param('chatId'));
-    if (!await chat.exists()) return notFound(c, 'chat not found');
-    return ok(c, await chat.listMessages());
+  app.post('/api/journals/:id/entries', async (c) => {
+    const journalId = c.req.param('id');
+    const body = await c.req.json();
+    if (!body.content?.trim()) return bad(c, 'content required');
+    const entry = await EntryEntity.create(c.env, {
+      ...body,
+      id: crypto.randomUUID(),
+      journalId,
+      date: new Date().toISOString()
+    });
+    // Update journal lastEntryAt
+    const journal = new JournalEntity(c.env, journalId);
+    if (await journal.exists()) {
+      await journal.patch({ lastEntryAt: entry.date });
+    }
+    return ok(c, entry);
   });
-
-  app.post('/api/chats/:chatId/messages', async (c) => {
-    const chatId = c.req.param('chatId');
-    const { userId, text } = (await c.req.json()) as { userId?: string; text?: string };
-    if (!isStr(userId) || !text?.trim()) return bad(c, 'userId and text required');
-    const chat = new ChatBoardEntity(c.env, chatId);
-    if (!await chat.exists()) return notFound(c, 'chat not found');
-    return ok(c, await chat.sendMessage(userId, text.trim()));
-  });
-
-  // DELETE: Users
-  app.delete('/api/users/:id', async (c) => ok(c, { id: c.req.param('id'), deleted: await UserEntity.delete(c.env, c.req.param('id')) }));
-
-  app.post('/api/users/deleteMany', async (c) => {
-    const { ids } = (await c.req.json()) as { ids?: string[] };
-    const list = ids?.filter(isStr) ?? [];
-    if (list.length === 0) return bad(c, 'ids required');
-    return ok(c, { deletedCount: await UserEntity.deleteMany(c.env, list), ids: list });
-  });
-
-  // DELETE: Chats
-  app.delete('/api/chats/:id', async (c) => ok(c, { id: c.req.param('id'), deleted: await ChatBoardEntity.delete(c.env, c.req.param('id')) }));
-
-  app.post('/api/chats/deleteMany', async (c) => {
-    const { ids } = (await c.req.json()) as { ids?: string[] };
-    const list = ids?.filter(isStr) ?? [];
-    if (list.length === 0) return bad(c, 'ids required');
-    return ok(c, { deletedCount: await ChatBoardEntity.deleteMany(c.env, list), ids: list });
+  // INSIGHTS (Mocked processing based on real data)
+  app.get('/api/insights', async (c) => {
+    return ok(c, {
+      moodTrends: [
+        { date: '2024-05-04', score: 3 },
+        { date: '2024-05-10', score: 5 },
+      ],
+      writingFrequency: [
+        { day: 'Mon', count: 2 },
+        { day: 'Tue', count: 4 },
+      ],
+      topTopics: [
+        { text: 'Growth', value: 85 },
+        { text: 'Focus', value: 70 },
+      ],
+    });
   });
 }
