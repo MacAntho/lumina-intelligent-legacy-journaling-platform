@@ -1,5 +1,4 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import type { Journal, Entry, ExportOptions } from '@shared/types';
 import { format } from 'date-fns';
 export async function generateJournalPdf(journal: Journal, entries: Entry[], options: ExportOptions) {
@@ -46,17 +45,17 @@ export async function generateJournalPdf(journal: Journal, entries: Entry[], opt
       return true;
     })
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  filteredEntries.slice(0, 20).forEach((entry, i) => {
-    doc.setFontSize(12);
-    const dateStr = format(new Date(entry.date), 'MMMM do, yyyy');
+  filteredEntries.slice(0, 22).forEach((entry, i) => {
+    doc.setFontSize(10);
+    const dateStr = format(new Date(entry.date), 'MMM dd, yyyy');
     const titleStr = entry.title || 'Untitled Entry';
     doc.text(`${i + 1}. ${dateStr}`, 20, yPos);
-    doc.text(titleStr, 120, yPos);
-    yPos += 10;
+    doc.text(titleStr.length > 40 ? titleStr.substring(0, 37) + '...' : titleStr, 60, yPos);
+    yPos += 8;
   });
-  if (filteredEntries.length > 20) {
+  if (filteredEntries.length > 22) {
     doc.setFontSize(10);
-    doc.text(`... and ${filteredEntries.length - 20} more entries.`, 20, yPos);
+    doc.text(`... and ${filteredEntries.length - 22} more entries.`, 20, yPos);
   }
   // CONTENT PAGES
   filteredEntries.forEach((entry) => {
@@ -73,30 +72,18 @@ export async function generateJournalPdf(journal: Journal, entries: Entry[], opt
     // Body
     doc.setFont('times', 'normal');
     doc.setFontSize(12);
-    const splitContent = doc.splitTextToSize(entry.content, 170);
+    const content = entry.content || '— No written content for this reflection —';
+    const splitContent = doc.splitTextToSize(content, 170);
     doc.text(splitContent, 20, 50);
-    let currentY = 50 + (splitContent.length * 7);
-    // Tags
+    let currentY = 50 + (splitContent.length * 6);
+    // Metadata
     if (options.includeTags && entry.tags?.length > 0) {
+      if (currentY > 260) { doc.addPage(); currentY = 20; }
       currentY += 10;
       doc.setFontSize(10);
       doc.setTextColor(secondaryColor);
       doc.text(`Tags: ${entry.tags.join(', ')}`, 20, currentY);
     }
-    // Images (Simple Placeholder for this implementation)
-    if (options.includeImages && entry.images?.length > 0) {
-      currentY += 20;
-      doc.text('[Images attached in digital archive]', 20, currentY);
-    }
   });
-  // BACK PAGE
-  doc.addPage();
-  doc.setFillColor(primaryColor);
-  doc.rect(0, 0, 210, 297, 'F');
-  doc.setTextColor('#ffffff');
-  doc.setFontSize(14);
-  doc.text('Your legacy is secured.', 105, 140, { align: 'center' });
-  doc.setFontSize(10);
-  doc.text(`Exported on ${format(new Date(), 'PPPP')}`, 105, 150, { align: 'center' });
   return doc;
 }

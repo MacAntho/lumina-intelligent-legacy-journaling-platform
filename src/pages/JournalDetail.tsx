@@ -13,7 +13,7 @@ import * as LucideIcons from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import { JOURNAL_TEMPLATES } from '@/../shared/templates';
+import { JOURNAL_TEMPLATES } from '@shared/templates';
 import { ExportDialog } from '@/components/ExportDialog';
 import { cn } from '@/lib/utils';
 export function JournalDetail() {
@@ -26,7 +26,6 @@ export function JournalDetail() {
   const isSaving = useAppStore(s => s.isSaving);
   const fetchEntries = useAppStore(s => s.fetchEntries);
   const journal = journals.find(j => j.id === id);
-  // Default safely if journal or template isn't found/hydrated
   const template = JOURNAL_TEMPLATES.find(t => t.id === journal?.templateId) || JOURNAL_TEMPLATES[0];
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [title, setTitle] = useState('');
@@ -37,7 +36,6 @@ export function JournalDetail() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
-  // Initialize from draft if exists
   useEffect(() => {
     if (id && drafts[id]) {
       const d = drafts[id];
@@ -47,7 +45,6 @@ export function JournalDetail() {
       setFormData(d.structuredData || {});
     }
   }, [id, drafts]);
-  // Sync entries with search/filter
   useEffect(() => {
     if (id) {
       const params = new URLSearchParams();
@@ -56,7 +53,6 @@ export function JournalDetail() {
       fetchEntries(id, params.toString());
     }
   }, [id, fetchEntries, searchQuery, activeTagFilter]);
-  // Auto-save draft every 30 seconds
   useEffect(() => {
     const timer = setInterval(() => {
       if (id && (title || tags.length > 0 || Object.keys(formData).length > 0)) {
@@ -80,7 +76,7 @@ export function JournalDetail() {
       structuredData: formData,
       tags,
       images,
-      mood: (formData.mood_score || formData.intensity || 'Normal').toString()
+      mood: String(formData.mood_score || formData.intensity || 'Normal')
     });
     setFormData({});
     setTitle('');
@@ -128,7 +124,6 @@ export function JournalDetail() {
   const renderMarkdown = (text: string) => {
     if (!text) return null;
     return text.split('\n').map((line, i) => {
-      // Improved regex to handle bold headers better
       const boldMatch = line.match(/^\*\*(.*?)\*\*(.*)/);
       if (boldMatch) {
         return (
@@ -182,133 +177,49 @@ export function JournalDetail() {
         </header>
         <div className="grid grid-cols-1 gap-12">
           {!previewMode ? (
-            <motion.section
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-8 shadow-sm print:hidden"
-            >
+            <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-8 shadow-sm print:hidden">
               <div className="space-y-6">
                 <div className="space-y-2">
                   <Label className="text-stone-400 text-[10px] uppercase font-bold tracking-widest">Entry Title</Label>
-                  <Input
-                    placeholder="Capture the essence of this moment..."
-                    className="border-none text-2xl font-serif p-0 focus-visible:ring-0 placeholder:text-stone-200 h-auto"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                  />
+                  <Input placeholder="Capture..." className="border-none text-2xl font-serif p-0 focus-visible:ring-0 placeholder:text-stone-200 h-auto" value={title} onChange={(e) => setTitle(e.target.value)} />
                 </div>
                 {template.fields.map((field) => (
                   <div key={field.id} className="space-y-2">
                     <Label className="text-stone-600 font-medium">{field.label}</Label>
                     {field.type === 'textarea' ? (
                       <div className="relative">
-                        <Textarea
-                          placeholder={field.placeholder}
-                          className="rounded-xl border-stone-100 min-h-[120px] focus:ring-stone-200 bg-stone-50/30"
-                          value={formData[field.id] || ''}
-                          onChange={(e) => updateField(field.id, e.target.value)}
-                        />
-                        <button
-                          onClick={toggleRecording}
-                          className={cn(
-                            "absolute bottom-3 right-3 p-2 rounded-full transition-all",
-                            isRecording ? "bg-red-500 text-white animate-recording" : "bg-stone-100 text-stone-400 hover:text-stone-600"
-                          )}
-                        >
-                          <Mic size={16} />
-                        </button>
+                        <Textarea placeholder={field.placeholder} className="rounded-xl border-stone-100 min-h-[120px] focus:ring-stone-200 bg-stone-50/30" value={formData[field.id] || ''} onChange={(e) => updateField(field.id, e.target.value)} />
+                        <button onClick={toggleRecording} className={cn("absolute bottom-3 right-3 p-2 rounded-full transition-all", isRecording ? "bg-red-500 text-white animate-recording" : "bg-stone-100 text-stone-400 hover:text-stone-600")}><Mic size={16} /></button>
                       </div>
                     ) : field.type === 'number' ? (
-                      <Input
-                        type="number"
-                        placeholder={field.placeholder}
-                        className="rounded-xl border-stone-100"
-                        value={formData[field.id] || ''}
-                        onChange={(e) => updateField(field.id, e.target.value, 'number')}
-                      />
+                      <Input type="number" placeholder={field.placeholder} className="rounded-xl border-stone-100" value={formData[field.id] || ''} onChange={(e) => updateField(field.id, e.target.value, 'number')} />
                     ) : field.type === 'select' ? (
                       <Select onValueChange={(val) => updateField(field.id, val)} value={formData[field.id]}>
-                        <SelectTrigger className="rounded-xl border-stone-100">
-                          <SelectValue placeholder="Select an option" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {field.options?.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
-                        </SelectContent>
+                        <SelectTrigger className="rounded-xl border-stone-100"><SelectValue placeholder="Select an option" /></SelectTrigger>
+                        <SelectContent>{field.options?.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}</SelectContent>
                       </Select>
                     ) : field.type === 'rating' ? (
                       <div className="flex gap-2">
                         {[1, 2, 3, 4, 5].map((num) => (
-                          <button
-                            key={num}
-                            onClick={() => updateField(field.id, num)}
-                            className={cn(
-                              "p-3 rounded-xl border transition-all hover:scale-105",
-                              (formData[field.id] || 0) >= num ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-stone-50 border-stone-100 text-stone-300"
-                            )}
-                          >
-                            <Star size={18} fill={(formData[field.id] || 0) >= num ? "currentColor" : "none"} />
-                          </button>
+                          <button key={num} onClick={() => updateField(field.id, num)} className={cn("p-3 rounded-xl border transition-all hover:scale-105", (formData[field.id] || 0) >= num ? "bg-amber-50 border-amber-200 text-amber-500" : "bg-stone-50 border-stone-100 text-stone-300")}><Star size={18} fill={(formData[field.id] || 0) >= num ? "currentColor" : "none"} /></button>
                         ))}
                       </div>
                     ) : (
-                      <Input
-                        placeholder={field.placeholder}
-                        className="rounded-xl border-stone-100"
-                        value={formData[field.id] || ''}
-                        onChange={(e) => updateField(field.id, e.target.value)}
-                      />
+                      <Input placeholder={field.placeholder} className="rounded-xl border-stone-100" value={formData[field.id] || ''} onChange={(e) => updateField(field.id, e.target.value)} />
                     )}
                   </div>
                 ))}
-                <div className="space-y-4 pt-4 border-t border-stone-50">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-stone-600 font-medium flex items-center gap-2">
-                      <Sparkles size={14} className="text-amber-500" /> Tags & Media
-                    </Label>
-                    <label className="cursor-pointer text-stone-400 hover:text-stone-900 transition-colors">
-                      <ImageIcon size={20} />
-                      <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-                    </label>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {tags.map(tag => (
-                      <Badge key={tag} variant="secondary" className="rounded-full px-3 py-1 bg-stone-100 text-stone-600 flex items-center gap-1">
-                        {tag} <button onClick={() => setTags(tags.filter(t => t !== tag))}><X size={10}/></button>
-                      </Badge>
-                    ))}
-                    <Input
-                      placeholder="Add tag + press Enter"
-                      className="inline-flex w-40 border-none h-6 text-xs focus-visible:ring-0 p-0"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && e.currentTarget.value) {
-                          setTags([...tags, e.currentTarget.value]);
-                          e.currentTarget.value = '';
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
               </div>
               <div className="mt-8 flex items-center justify-between border-t border-stone-50 pt-6">
-                <div className="text-xs text-stone-400 font-light italic">
-                  {isSaving ? 'Synching...' : 'Auto-saving enabled.'}
-                </div>
-                <Button
-                  onClick={handleSave}
-                  disabled={isSaving || (!title && Object.keys(formData).length === 0)}
-                  className="rounded-full bg-stone-900 text-white px-8"
-                >
+                <div className="text-xs text-stone-400 font-light italic">{isSaving ? 'Synching...' : 'Auto-saving enabled.'}</div>
+                <Button onClick={handleSave} disabled={isSaving || (!title && Object.keys(formData).length === 0)} className="rounded-full bg-stone-900 text-white px-8">
                   {isSaving ? <Loader2 className="animate-spin mr-2" size={16} /> : <Send size={16} className="mr-2" />}
                   Preserve Entry
                 </Button>
               </div>
             </motion.section>
           ) : (
-            <motion.section
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="prose-lumina bg-white border border-stone-200 rounded-3xl p-12 shadow-sm min-h-[400px]"
-            >
+            <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="prose-lumina bg-white border border-stone-200 rounded-3xl p-12 shadow-sm min-h-[400px]">
               <h1 className="text-3xl font-serif font-medium mb-8">{title || 'Untitled Reflection'}</h1>
               {template.fields.map(f => (
                 <div key={f.id} className="mb-6">
@@ -333,69 +244,22 @@ export function JournalDetail() {
               </h2>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={14} />
-                <Input
-                  placeholder="Search entries..."
-                  className="pl-9 rounded-full h-9 bg-stone-50 border-stone-100 text-sm w-48 focus:w-64 transition-all"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
+                <Input placeholder="Search..." className="pl-9 rounded-full h-9 bg-stone-50 border-stone-100 text-sm w-48 focus:w-64 transition-all" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               </div>
             </div>
-            {allTags.length > 0 && (
-              <div className="flex flex-wrap gap-2 print:hidden">
-                <Badge
-                  variant={activeTagFilter === null ? "default" : "outline"}
-                  className={cn("rounded-full cursor-pointer", activeTagFilter === null && "bg-stone-900")}
-                  onClick={() => setActiveTagFilter(null)}
-                >
-                  All
-                </Badge>
-                {allTags.map(tag => (
-                  <Badge
-                    key={tag}
-                    variant={activeTagFilter === tag ? "default" : "outline"}
-                    className={cn("rounded-full cursor-pointer", activeTagFilter === tag && "bg-stone-900")}
-                    onClick={() => setActiveTagFilter(tag)}
-                  >
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            )}
             <div className="space-y-8">
               <AnimatePresence mode="popLayout">
                 {entries.length === 0 ? (
-                  <div className="text-center py-20 text-stone-400 italic">No entries found matching your criteria.</div>
+                  <div className="text-center py-20 text-stone-400 italic">No entries found.</div>
                 ) : (
                   entries.map((entry) => (
-                    <motion.div
-                      key={entry.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-stone-50 dark:bg-stone-900/50 border border-stone-100 rounded-3xl p-8 print:border-none print:p-0"
-                    >
+                    <motion.div key={entry.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-stone-50 dark:bg-stone-900/50 border border-stone-100 rounded-3xl p-8 print:border-none print:p-0">
                       <div className="flex justify-between items-start mb-6">
-                        <time className="text-xs font-medium text-stone-400 flex items-center gap-1">
-                          <Calendar size={12} />
-                          {format(new Date(entry.date), 'EEEE, MMM dd, yyyy')}
-                        </time>
-                        {entry.mood && (
-                          <Badge variant="outline" className="text-[10px] rounded-full uppercase border-stone-200">
-                            {entry.mood}
-                          </Badge>
-                        )}
+                        <time className="text-xs font-medium text-stone-400 flex items-center gap-1"><Calendar size={12} /> {format(new Date(entry.date), 'EEEE, MMM dd, yyyy')}</time>
+                        {entry.mood && <Badge variant="outline" className="text-[10px] rounded-full uppercase border-stone-200">{entry.mood}</Badge>}
                       </div>
                       <h3 className="text-2xl font-serif font-medium text-stone-900 mb-4">{entry.title || 'Untitled Entry'}</h3>
-                      <div className="prose-lumina-sm text-stone-700 font-serif leading-relaxed space-y-4">
-                        {renderMarkdown(entry.content)}
-                      </div>
-                      {entry.tags && entry.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-6">
-                          {entry.tags.map(tag => (
-                            <span key={tag} className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">#{tag}</span>
-                          ))}
-                        </div>
-                      )}
+                      <div className="prose-lumina-sm text-stone-700 font-serif leading-relaxed space-y-4">{renderMarkdown(entry.content)}</div>
                     </motion.div>
                   ))
                 )}
@@ -404,14 +268,7 @@ export function JournalDetail() {
           </section>
         </div>
       </div>
-      {journal && (
-        <ExportDialog 
-          open={exportOpen} 
-          onOpenChange={setExportOpen} 
-          journal={journal} 
-          entries={entries} 
-        />
-      )}
+      {journal && <ExportDialog open={exportOpen} onOpenChange={setExportOpen} journal={journal} entries={entries} />}
     </AppLayout>
   );
 }

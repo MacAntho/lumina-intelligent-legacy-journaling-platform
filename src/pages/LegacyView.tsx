@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api-client';
-import type { LegacyPublicData } from '@shared/types';
+import type { LegacyPublicData, Journal } from '@shared/types';
 import { generateJournalPdf } from '@/lib/pdf-export';
 import { Loader2, Download, Sparkles, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -27,23 +27,15 @@ export function LegacyView() {
       fetchShared();
     }
   }, [shareId, key]);
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#FDFCFB] flex flex-col items-center justify-center p-4">
-        <Loader2 className="animate-spin text-stone-900 h-10 w-10 mb-4" />
-        <p className="text-stone-500 font-serif italic">Accessing legacy archive...</p>
-      </div>
-    );
-  }
   const handleExport = async () => {
     if (!data) return;
-    const dummyJournal = {
+    const dummyJournal: Journal = {
       id: 'shared',
       userId: 'recipient',
       templateId: 'reflective',
       title: data.journalTitle,
       description: `Legacy archive from ${data.authorName}`,
-      type: 'reflective' as const,
+      type: 'reflective',
       createdAt: new Date().toISOString()
     };
     const doc = await generateJournalPdf(dummyJournal, data.entries, {
@@ -55,7 +47,14 @@ export function LegacyView() {
     });
     doc.save(`${data.journalTitle.toLowerCase().replace(/\s+/g, '-')}-shared.pdf`);
   };
-
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#FDFCFB] flex flex-col items-center justify-center p-4">
+        <Loader2 className="animate-spin text-stone-900 h-10 w-10 mb-4" />
+        <p className="text-stone-500 font-serif italic">Accessing legacy archive...</p>
+      </div>
+    );
+  }
   if (!data) {
     return (
       <div className="min-h-screen bg-[#FDFCFB] flex flex-col items-center justify-center p-4 text-center">
@@ -86,7 +85,7 @@ export function LegacyView() {
         </header>
         <div className="space-y-24 print:space-y-12">
           {(!data.entries || data.entries.length === 0) ? (
-            <p className="text-center italic text-stone-400 py-20">No entries have been shared in this archive.</p>
+            <p className="text-center italic text-stone-400 py-20">No entries shared.</p>
           ) : (
             data.entries.map((entry) => (
               <article key={entry.id} className="prose-lumina break-inside-avoid">
@@ -95,24 +94,11 @@ export function LegacyView() {
                   {format(new Date(entry.date), 'MMMM do, yyyy')}
                 </div>
                 <h3 className="text-3xl font-serif font-medium text-stone-900 mb-6">{entry.title || 'Untitled Entry'}</h3>
-                <div className="text-lg leading-relaxed text-stone-700 font-serif whitespace-pre-wrap">
-                  {entry.content}
-                </div>
-                {entry.tags && entry.tags.length > 0 && (
-                  <div className="mt-8 flex gap-3 opacity-40">
-                    {entry.tags.map(tag => <span key={tag} className="text-[10px] uppercase font-bold">#{tag}</span>)}
-                  </div>
-                )}
+                <div className="text-lg leading-relaxed text-stone-700 font-serif whitespace-pre-wrap">{entry.content}</div>
               </article>
             ))
           )}
         </div>
-        <footer className="mt-40 pt-12 border-t border-stone-100 text-center print:mt-20">
-          <div className="inline-flex h-10 w-10 rounded-xl bg-stone-900 items-center justify-center text-white mb-4">
-            <Sparkles size={20} />
-          </div>
-          <p className="text-stone-400 text-sm italic">Preserved via Lumina Intelligence</p>
-        </footer>
       </main>
     </div>
   );

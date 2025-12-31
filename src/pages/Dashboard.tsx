@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { JOURNAL_TEMPLATES, type JournalTemplate } from '@/../shared/templates';
+import { JOURNAL_TEMPLATES, type JournalTemplate } from '@shared/templates';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 export function Dashboard() {
@@ -124,13 +124,8 @@ export function Dashboard() {
             </Dialog>
           </div>
         </header>
-        {/* Morning Sanctuary Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }}
-            className="group"
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="group">
             <Card className="h-full rounded-4xl border-none bg-stone-900 text-white shadow-2xl relative overflow-hidden p-8">
               <div className="relative z-10 flex flex-col h-full justify-between gap-6">
                 <div>
@@ -143,7 +138,7 @@ export function Dashboard() {
                   </h2>
                 </div>
                 <div className="flex items-center justify-between">
-                  <Button 
+                  <Button
                     onClick={() => dailyContent?.targetJournalId && navigate(`/journal/${dailyContent.targetJournalId}`)}
                     className="rounded-full bg-white text-stone-900 hover:bg-stone-100 group/btn"
                   >
@@ -159,11 +154,7 @@ export function Dashboard() {
               </div>
             </Card>
           </motion.div>
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <Card className="h-full rounded-4xl border-stone-100 dark:border-stone-800 shadow-sm p-8 bg-stone-50/50 flex flex-col justify-center text-center">
               <div className="text-stone-400 italic font-serif text-lg leading-relaxed px-4">
                 "{dailyContent?.affirmation || "I am the architect of my own growth, building a legacy one word at a time."}"

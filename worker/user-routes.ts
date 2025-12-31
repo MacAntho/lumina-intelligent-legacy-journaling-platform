@@ -14,6 +14,7 @@ async function hashPassword(password: string, salt: string) {
   return btoa(String.fromCharCode(...new Uint8Array(exported)));
 }
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
+  // Public Auth Routes
   app.post('/api/auth/register', async (c) => {
     const body = await c.req.json<RegisterRequest>();
     if (!body.email || !body.password || !body.name) return bad(c, 'Missing fields');
@@ -46,6 +47,23 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const token = await sign({ userId: userAuth.profile.id, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
     return ok(c, { user: userAuth.profile, token });
   });
+  // Public Legacy View Route (MUST be above JWT middleware)
+  app.get('/api/public/legacy/:shareId', async (c) => {
+    const shareId = c.req.param('shareId');
+    const key = c.req.query('key');
+    const shareInst = new LegacyShareEntity(c.env, shareId);
+    if (!(await shareInst.exists())) return notFound(c, 'Legacy archive not found');
+    const share = await shareInst.getState();
+    if (share.accessKey !== key) return bad(c, 'Invalid access key');
+    const journal = await new JournalEntity(c.env, share.journalId).getState();
+    const entries = await EntryEntity.listByJournal(c.env, share.journalId, share.userId);
+    return ok(c, {
+      journalTitle: journal.title,
+      authorName: "A Lumina Resident",
+      entries: entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    });
+  });
+  // Protected Routes Middleware
   app.use('/api/*', jwt({ secret: JWT_SECRET }));
   app.get('/api/auth/me', async (c) => {
     const payload = c.get('jwtPayload');
@@ -187,21 +205,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       createdAt: new Date().toISOString()
     });
     return ok(c, share);
-  });
-  app.get('/api/public/legacy/:shareId', async (c) => {
-    const shareId = c.req.param('shareId');
-    const key = c.req.query('key');
-    const shareInst = new LegacyShareEntity(c.env, shareId);
-    if (!(await shareInst.exists())) return notFound(c, 'Legacy archive not found');
-    const share = await shareInst.getState();
-    if (share.accessKey !== key) return bad(c, 'Invalid access key');
-    const journal = await new JournalEntity(c.env, share.journalId).getState();
-    const entries = await EntryEntity.listByJournal(c.env, share.journalId, share.userId);
-    return ok(c, {
-      journalTitle: journal.title,
-      authorName: "A Lumina Resident",
-      entries: entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    });
   });
   app.get('/api/exports', async (c) => {
     const payload = c.get('jwtPayload');
