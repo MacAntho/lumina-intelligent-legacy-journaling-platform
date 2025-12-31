@@ -78,7 +78,7 @@ function updateWranglerJsonc() {
 
 function runSetupCommands() {
     const commands = [
-    "bun add jspdf jspdf-autotable html2canvas"
+    "bun add jspdf jspdf-autotable"
 ];
     
     if (commands.length === 0) {
