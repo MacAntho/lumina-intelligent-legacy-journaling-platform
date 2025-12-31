@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { api } from './api-client';
 import { toast } from 'sonner';
 import type {
-  Journal, Entry, User, LegacyContact, InsightData,
+  Journal, Entry, User, LegacyContact, InsightData, SavedSearch,
   LoginRequest, RegisterRequest, AuthResponse, AiMessage,
   DailyContent, ExportLog, LegacyAuditLog, AppNotification
 } from '@shared/types';
@@ -22,6 +22,8 @@ interface AppState {
   exportHistory: ExportLog[];
   notifications: AppNotification[];
   unreadCount: number;
+  recentSearches: string[];
+  savedSearches: SavedSearch[];
   isLoading: boolean;
   isSaving: boolean;
   isInitialized: boolean;
@@ -50,6 +52,11 @@ interface AppState {
   markNotificationRead: (id: string) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
   deleteNotification: (id: string) => Promise<void>;
+  addRecentSearch: (query: string) => void;
+  clearRecentSearches: () => void;
+  fetchSavedSearches: () => Promise<void>;
+  saveSearch: (search: Partial<SavedSearch>) => Promise<void>;
+  deleteSavedSearch: (id: string) => Promise<void>;
 }
 export const useAppStore = create<AppState>((set, get) => ({
   user: null,
@@ -66,6 +73,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   exportHistory: [],
   notifications: [],
   unreadCount: 0,
+  recentSearches: JSON.parse(localStorage.getItem('lumina_recent_searches') || '[]'),
+  savedSearches: [],
   isLoading: false,
   isSaving: false,
   isInitialized: false,
@@ -89,6 +98,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().fetchDailyContent();
       get().fetchLegacyAuditLogs();
       get().fetchNotifications();
+      get().fetchSavedSearches();
       if (heartbeatInterval) clearInterval(heartbeatInterval);
       heartbeatInterval = setInterval(() => get().heartbeat(), 300000);
     } catch (error) {
@@ -161,6 +171,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     localStorage.removeItem('lumina_token');
     localStorage.removeItem('lumina_chat');
     localStorage.removeItem('lumina_drafts');
+    localStorage.removeItem('lumina_recent_searches');
     set({
       user: null,
       token: null,
@@ -174,6 +185,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       dailyContent: null,
       notifications: [],
       unreadCount: 0,
+      recentSearches: [],
+      savedSearches: [],
       isInitialized: false,
       isLoading: false
     });
@@ -384,5 +397,42 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (e) {
       set({ notifications: prev, unreadCount: prev.filter(n => !n.isRead).length });
     }
+  },
+  addRecentSearch: (query) => {
+    if (!query.trim()) return;
+    const current = get().recentSearches;
+    const next = [query, ...current.filter(q => q !== query)].slice(0, 5);
+    set({ recentSearches: next });
+    localStorage.setItem('lumina_recent_searches', JSON.stringify(next));
+  },
+  clearRecentSearches: () => {
+    set({ recentSearches: [] });
+    localStorage.setItem('lumina_recent_searches', JSON.stringify([]));
+  },
+  fetchSavedSearches: async () => {
+    try {
+      const savedSearches = await api<SavedSearch[]>('/api/searches');
+      set({ savedSearches });
+    } catch (e) { console.error('Fetch saved searches failed', e); }
+  },
+  saveSearch: async (searchData) => {
+    set({ isSaving: true });
+    try {
+      const saved = await api<SavedSearch>('/api/searches', {
+        method: 'POST',
+        body: JSON.stringify(searchData)
+      });
+      set(state => ({ savedSearches: [saved, ...state.savedSearches], isSaving: false }));
+      toast.success('Search pattern archived');
+    } catch (e) {
+      set({ isSaving: false });
+    }
+  },
+  deleteSavedSearch: async (id) => {
+    try {
+      await api(`/api/searches/${id}`, { method: 'DELETE' });
+      set(state => ({ savedSearches: state.savedSearches.filter(s => s.id !== id) }));
+      toast.success('Search pattern removed');
+    } catch (e) { console.error('Delete saved search failed', e); }
   }
 }));

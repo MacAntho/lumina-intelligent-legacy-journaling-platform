@@ -5,7 +5,8 @@ import type { Env } from './core-utils';
 import {
   UserAuthEntity, JournalEntity, EntryEntity,
   LegacyContactEntity, LegacyShareEntity, ExportLogEntity,
-  LegacyAuditLogEntity, NotificationEntity
+  LegacyAuditLogEntity, NotificationEntity,
+  SavedSearchEntity
 } from "./entities";
 import { ok, bad, notFound } from './core-utils';
 import type { LoginRequest, RegisterRequest } from "@shared/types";
@@ -123,6 +124,26 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const entries = await EntryEntity.listByJournal(c.env, share.journalId, share.userId);
     return ok(c, { journalTitle: journal.title, authorName: "A Lumina Resident", entries, permissions: share.permissions });
   });
+  app.get('/api/searches', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await SavedSearchEntity.listByUser(c.env, payload.userId));
+  });
+  app.post('/api/searches', async (c) => {
+    const payload = c.get('jwtPayload');
+    const body = await c.req.json();
+    const search = await SavedSearchEntity.create(c.env, {
+      ...body,
+      id: crypto.randomUUID(),
+      userId: payload.userId,
+      createdAt: new Date().toISOString()
+    });
+    return ok(c, search);
+  });
+  app.delete('/api/searches/:id', async (c) => {
+    const id = c.req.param('id');
+    await SavedSearchEntity.delete(c.env, id);
+    return ok(c, true);
+  });
   app.use('/api/*', jwt({ secret: JWT_SECRET }));
   app.get('/api/activity/stream', async (c) => {
     const payload = c.get('jwtPayload');
@@ -195,17 +216,24 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const journalId = c.req.param('id');
     const q = c.req.query('q')?.toLowerCase();
     const tag = c.req.query('tag');
+    const mood = c.req.query('mood');
+    const minWords = parseInt(c.req.query('minWords') || '0');
     const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
     let filtered = entries;
     if (q) filtered = filtered.filter(e => e.content.toLowerCase().includes(q) || e.title?.toLowerCase().includes(q));
     if (tag) filtered = filtered.filter(e => e.tags.includes(tag));
+    if (mood) filtered = filtered.filter(e => e.mood === mood);
+    if (minWords > 0) filtered = filtered.filter(e => (e.wordCount || 0) >= minWords);
     return ok(c, filtered);
   });
   app.post('/api/journals/:id/entries', async (c) => {
     const payload = c.get('jwtPayload');
     const body = await c.req.json();
+    const content = body.content || '';
+    const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
     const entry = await EntryEntity.create(c.env, {
       ...body,
+      wordCount,
       id: crypto.randomUUID(),
       userId: payload.userId,
       journalId: c.req.param('id'),

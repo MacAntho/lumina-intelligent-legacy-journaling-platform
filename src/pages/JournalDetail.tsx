@@ -8,13 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronLeft, Send, Sparkles, Calendar, Loader2, Download, Star, Book, Mic, Image as ImageIcon, X, Search, Eye, PenLine } from 'lucide-react';
+import { ChevronLeft, Send, Sparkles, Calendar, Loader2, Download, Star, Book, Mic, Image as ImageIcon, X, Search, Eye, PenLine, LayoutList } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { JOURNAL_TEMPLATES } from '@shared/templates';
 import { ExportDialog } from '@/components/ExportDialog';
+import { AdvancedSearch } from '@/components/AdvancedSearch';
 import { cn } from '@/lib/utils';
 export function JournalDetail() {
   const { id } = useParams();
@@ -33,8 +34,7 @@ export function JournalDetail() {
   const [images, setImages] = useState<string[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [filteredEntries, setFilteredEntries] = useState<any[]>([]);
   const [exportOpen, setExportOpen] = useState(false);
   useEffect(() => {
     if (id && drafts[id]) {
@@ -47,12 +47,9 @@ export function JournalDetail() {
   }, [id, drafts]);
   useEffect(() => {
     if (id) {
-      const params = new URLSearchParams();
-      if (searchQuery) params.append('q', searchQuery);
-      if (activeTagFilter) params.append('tag', activeTagFilter);
-      fetchEntries(id, params.toString());
+      fetchEntries(id);
     }
-  }, [id, fetchEntries, searchQuery, activeTagFilter]);
+  }, [id, fetchEntries]);
   useEffect(() => {
     const timer = setInterval(() => {
       if (id && (title || tags.length > 0 || Object.keys(formData).length > 0)) {
@@ -245,19 +242,26 @@ export function JournalDetail() {
           <section className="space-y-8 pb-20">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
               <h2 className="text-xl font-medium text-stone-900 flex items-center gap-2">
-                Discovery <span className="text-sm font-normal text-stone-400">({entries.length})</span>
+                Discovery <span className="text-sm font-normal text-stone-400">({filteredEntries.length})</span>
               </h2>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={14} />
-                <Input placeholder="Search..." className="pl-9 rounded-full h-9 bg-stone-50 border-stone-100 text-sm w-48 focus:w-64 transition-all" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-              </div>
             </div>
+            
+            <AdvancedSearch 
+              items={entries} 
+              onResults={setFilteredEntries} 
+              searchFields={['title', 'content']}
+              placeholder="Search in this sanctuary..."
+            />
+
             <div className="space-y-8">
               <AnimatePresence mode="popLayout">
-                {entries.length === 0 ? (
-                  <div className="text-center py-20 text-stone-400 italic">No entries found.</div>
+                {filteredEntries.length === 0 ? (
+                  <div className="text-center py-20 text-stone-400 italic flex flex-col items-center gap-2">
+                    <LayoutList size={24} className="opacity-20" />
+                    No reflections match your criteria.
+                  </div>
                 ) : (
-                  entries.map((entry) => (
+                  filteredEntries.map((entry) => (
                     <motion.div key={entry.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-stone-50 dark:bg-stone-900/50 border border-stone-100 rounded-3xl p-8 print:border-none print:p-0">
                       <div className="flex justify-between items-start mb-6">
                         <time className="text-xs font-medium text-stone-400 flex items-center gap-1"><Calendar size={12} /> {format(new Date(entry.date), 'EEEE, MMM dd, yyyy')}</time>

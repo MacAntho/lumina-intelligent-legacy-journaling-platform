@@ -16,6 +16,22 @@ export interface AppNotification {
   createdAt: string;
   metadata?: Record<string, any>;
 }
+export interface SearchFilters {
+  dateRange?: { start: string; end: string };
+  moods?: string[];
+  templateIds?: string[];
+  hasImages?: boolean;
+  tags?: string[];
+  minWordCount?: number;
+}
+export interface SavedSearch {
+  id: string;
+  userId: string;
+  name: string;
+  query: string;
+  filters: SearchFilters;
+  createdAt: string;
+}
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'system';
   notificationsEnabled: boolean;
@@ -73,6 +89,7 @@ export interface Entry {
   mood: string;
   tags: string[];
   images: string[];
+  wordCount: number;
 }
 export interface LegacyContact {
   id: string;

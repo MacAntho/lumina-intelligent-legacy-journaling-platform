@@ -1,5 +1,5 @@
 import { IndexedEntity, Env } from "./core-utils";
-import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog, LegacyAuditLog, AppNotification } from "@shared/types";
+import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog, LegacyAuditLog, AppNotification, SavedSearch } from "@shared/types";
 export interface UserAuthData {
   id: string; // email
   passwordHash: string;
@@ -17,9 +17,9 @@ export class UserAuthEntity extends IndexedEntity<UserAuthData> {
       id: "",
       name: "",
       email: "",
-      preferences: { 
-        theme: 'system', 
-        notificationsEnabled: true, 
+      preferences: {
+        theme: 'system',
+        notificationsEnabled: true,
         language: 'en',
         notificationSettings: {
           entry: true, prompt: true, affirmation: true, share: true, access: true, insight: true, export: true, reminder: true, limit: true, activity: true
@@ -67,7 +67,8 @@ export class EntryEntity extends IndexedEntity<Entry> {
     date: "",
     mood: "Normal",
     tags: [],
-    images: []
+    images: [],
+    wordCount: 0
   };
   static async listByJournal(env: Env, journalId: string, userId: string): Promise<Entry[]> {
     const { items } = await this.list(env, null, 1000);
@@ -166,5 +167,21 @@ export class NotificationEntity extends IndexedEntity<AppNotification> {
     const { items } = await this.list(env, null, 1000);
     const userNotes = items.filter(n => n.userId === userId && !n.isRead);
     await Promise.all(userNotes.map(n => new NotificationEntity(env, n.id).patch({ isRead: true })));
+  }
+}
+export class SavedSearchEntity extends IndexedEntity<SavedSearch> {
+  static readonly entityName = "saved-search";
+  static readonly indexName = "saved-searches";
+  static readonly initialState: SavedSearch = {
+    id: "",
+    userId: "",
+    name: "",
+    query: "",
+    filters: {},
+    createdAt: ""
+  };
+  static async listByUser(env: Env, userId: string): Promise<SavedSearch[]> {
+    const { items } = await this.list(env, null, 100);
+    return items.filter(s => s.userId === userId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 }

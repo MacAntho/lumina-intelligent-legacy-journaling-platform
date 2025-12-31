@@ -14,6 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { JOURNAL_TEMPLATES, type JournalTemplate } from '@shared/templates';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { AdvancedSearch } from '@/components/AdvancedSearch';
 export function Dashboard() {
   const journals = useAppStore((s) => s.journals);
   const isLoading = useAppStore((s) => s.isLoading);
@@ -24,6 +25,7 @@ export function Dashboard() {
   const addJournal = useAppStore((s) => s.addJournal);
   const deleteJournal = useAppStore((s) => s.deleteJournal);
   const navigate = useNavigate();
+  const [filteredJournals, setFilteredJournals] = useState<any[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [step, setStep] = useState<'template' | 'config'>('template');
   const [selectedTemplate, setSelectedTemplate] = useState<JournalTemplate>(JOURNAL_TEMPLATES[0]);
@@ -124,6 +126,15 @@ export function Dashboard() {
             </Dialog>
           </div>
         </header>
+
+        <section className="bg-stone-50/30 rounded-4xl p-1 border border-stone-100">
+          <AdvancedSearch 
+            items={journals} 
+            onResults={setFilteredJournals} 
+            searchFields={['title', 'description']}
+          />
+        </section>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="group">
             <Card className="h-full rounded-4xl border-none bg-stone-900 text-white shadow-2xl relative overflow-hidden p-8">
@@ -193,7 +204,7 @@ export function Dashboard() {
                 </div>
               ) : (
                 <>
-                  {journals.map((journal) => {
+                  {filteredJournals.map((journal) => {
                     const template = JOURNAL_TEMPLATES.find(t => t.id === journal.templateId) || JOURNAL_TEMPLATES[0];
                     const IconComponent = (LucideIcons as any)[template.icon] || Book;
                     return (
