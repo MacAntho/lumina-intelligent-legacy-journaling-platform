@@ -2,7 +2,7 @@
 
 A production-ready real-time chat application built on Cloudflare Workers with Durable Objects for stateful entities (Users, ChatBoards, Messages). Features a modern React frontend with shadcn/ui, Tailwind CSS, TanStack Query, and full CRUD operations via a type-safe API.
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/MacAntho/lumina-intelligent-legacy-journaling-platform)
 
 ## Key Features
 
@@ -95,7 +95,7 @@ Or manually:
 1. `bun build`
 2. `wrangler deploy`
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/MacAntho/lumina-intelligent-legacy-journaling-platform)
 
 **Configuration**: Edit `wrangler.jsonc` for custom bindings/migrations.
 
