@@ -10,15 +10,12 @@ import {
 } from "./entities";
 import { chatWithAssistant, analyzeJournalPatterns } from "./intelligence";
 import { ok, bad, notFound } from './core-utils';
-import type { 
-  LoginRequest, RegisterRequest, User, AnalysisRange, 
-  ExportOptions, LegacyAuditLog 
+import type {
+  LoginRequest, RegisterRequest, User, AnalysisRange,
+  ExportOptions, LegacyAuditLog, AiMessage
 } from "@shared/types";
 import { generateServerPdf } from "./pdf-service";
 const JWT_SECRET = "lumina-secret-key-change-this";
-/**
- * Hashes passwords using PBKDF2 for secure storage.
- */
 async function hashPassword(password: string, salt: string) {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits", "deriveKey"]);
@@ -26,19 +23,8 @@ async function hashPassword(password: string, salt: string) {
   const exported = await crypto.subtle.exportKey("raw", key);
   return btoa(String.fromCharCode(...new Uint8Array(exported)));
 }
-const LIMITS = {
-  free: { journals: 3, entriesPerMonth: 100 },
-  premium: { journals: 1000, entriesPerMonth: 10000 },
-  pro: { journals: 10000, entriesPerMonth: 100000 }
-};
-/**
- * Registers user routes on the Hono application.
- */
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
-  // --- PUBLIC ROUTES (No JWT required) ---
-  /**
-   * Fetches shared legacy archive metadata if valid access key is provided.
-   */
+  // --- PUBLIC ROUTES ---
   app.get('/api/public/legacy/:shareId', async (c) => {
     const shareId = c.req.param('shareId');
     const key = c.req.query('key');
@@ -61,9 +47,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     };
     return ok(c, data);
   });
-  /**
-   * Verifies password for a protected legacy archive.
-   */
   app.post('/api/public/legacy/:shareId/verify', async (c) => {
     const shareId = c.req.param('shareId');
     const { password } = await c.req.json();
@@ -75,17 +58,10 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const entries = await EntryEntity.listByJournal(c.env, share.journalId, "public");
     return ok(c, { entries });
   });
-  /**
-   * Dispatches password recovery instructions.
-   */
   app.post('/api/auth/forgot', async (c) => {
     const { email } = await c.req.json();
-    return ok(c, { message: "Recovery dispatched if account exists.", debugToken: "LMN-123-RECOVERY" });
+    return ok(c, { message: "Recovery dispatched if account exists.", debugToken: "LMN-DEBUG-" + Date.now().toString().slice(-6) });
   });
-  // --- AUTH PROTECTED ROUTES ---
-  /**
-   * Registers a new user.
-   */
   app.post('/api/auth/register', async (c) => {
     const body = await c.req.json<RegisterRequest>();
     if (!body.email || !body.password || !body.name) return bad(c, 'Missing fields');
@@ -101,36 +77,16 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       passwordHash: hash,
       salt,
       profile: {
-        id: userId,
-        name: body.name,
-        email: body.email.toLowerCase(),
-        preferences: {
-          theme: 'system',
-          notificationsEnabled: true,
-          language: 'en',
-          onboardingCompleted: false,
-          e2eEnabled: false,
-          analyticsOptIn: true,
-          privacyLevel: 'standard',
-          tier: 'free',
-          subscriptionStatus: 'active',
-          notificationSettings: {
-            entry: true, prompt: true, affirmation: true, share: true, access: true, insight: true, export: true, reminder: true, limit: true, activity: true
-          },
-          quietHours: { start: "22:00", end: "08:00", enabled: false }
-        },
+        id: userId, name: body.name, email: body.email.toLowerCase(),
+        preferences: { theme: 'system', notificationsEnabled: true, language: 'en', onboardingCompleted: false, e2eEnabled: false, analyticsOptIn: true, privacyLevel: 'standard', tier: 'free', subscriptionStatus: 'active', notificationSettings: { entry: true, prompt: true, affirmation: true, share: true, access: true, insight: true, export: true, reminder: true, limit: true, activity: true }, quietHours: { start: "22:00", end: "08:00", enabled: false } },
         usage: { journalCount: 0, monthlyEntryCount: 0, lastResetMonth: currentMonth },
-        createdAt: now,
-        lastHeartbeatAt: now
+        createdAt: now, lastHeartbeatAt: now
       }
     });
     await UsageEntity.create(c.env, { id: userId, journalCount: 0, monthlyEntryCount: 0, lastResetMonth: currentMonth });
     const token = await sign({ userId, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
     return ok(c, { user: userAuth.profile, token });
   });
-  /**
-   * Authenticates a user and returns a session token.
-   */
   app.post('/api/auth/login', async (c) => {
     const body = await c.req.json<LoginRequest>();
     const userAuth = await UserAuthEntity.findByEmail(c.env, body.email);
@@ -143,11 +99,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const token = await sign({ userId: userAuth.profile.id, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
     return ok(c, { user: updatedProfile, token });
   });
-  // JWT Middleware for everything else
+  // --- AUTH PROTECTED ROUTES ---
   app.use('/api/*', jwt({ secret: JWT_SECRET }));
-  /**
-   * Fetches the current authenticated user's profile and usage.
-   */
   app.get('/api/auth/me', async (c) => {
     const payload = c.get('jwtPayload');
     const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
@@ -155,9 +108,6 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const usage = await UsageEntity.getAndReset(c.env, userAuth.profile.id);
     return ok(c, { ...userAuth.profile, usage });
   });
-  /**
-   * Updates user preferences.
-   */
   app.put('/api/auth/settings', async (c) => {
     const payload = c.get('jwtPayload');
     const updates = await c.req.json();
@@ -167,45 +117,146 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     await new UserAuthEntity(c.env, payload.email).patch({ profile: updated });
     return ok(c, updated);
   });
-  /**
-   * Permanently deletes user account and all associated data.
-   */
   app.delete('/api/auth/me', async (c) => {
     const payload = c.get('jwtPayload');
     await UserAuthEntity.purgeAllUserData(c.env, payload.userId, payload.email);
     return ok(c, { message: "Sanctuary purged." });
   });
-  /**
-   * Lists all journals for the current user.
-   */
   app.get('/api/journals', async (c) => {
     const payload = c.get('jwtPayload');
     return ok(c, await JournalEntity.listByUser(c.env, payload.userId));
   });
-  /**
-   * Lists all entries for the current user.
-   */
+  app.post('/api/journals', async (c) => {
+    const payload = c.get('jwtPayload');
+    const data = await c.req.json();
+    const journal = await JournalEntity.create(c.env, {
+      ...JournalEntity.initialState,
+      ...data,
+      id: crypto.randomUUID(),
+      userId: payload.userId,
+      createdAt: new Date().toISOString()
+    });
+    return ok(c, journal);
+  });
+  app.delete('/api/journals/:id', async (c) => {
+    const id = c.req.param('id');
+    await JournalEntity.delete(c.env, id);
+    return ok(c, { id });
+  });
   app.get('/api/entries/all', async (c) => {
     const payload = c.get('jwtPayload');
     return ok(c, await EntryEntity.listByUser(c.env, payload.userId));
   });
-  /**
-   * Fetches the export history for the current user.
-   */
-  app.get('/api/exports', async (c) => {
+  app.post('/api/journals/:id/entries', async (c) => {
     const payload = c.get('jwtPayload');
-    return ok(c, await ExportLogEntity.listByUser(c.env, payload.userId));
+    const journalId = c.req.param('id');
+    const data = await c.req.json();
+    const entry = await EntryEntity.create(c.env, {
+      ...EntryEntity.initialState,
+      ...data,
+      id: crypto.randomUUID(),
+      userId: payload.userId,
+      journalId,
+      date: new Date().toISOString()
+    });
+    return ok(c, entry);
   });
-  /**
-   * Fetches the legacy audit logs for the current user.
-   */
-  app.get('/api/legacy/audit', async (c) => {
+  app.get('/api/legacy-contacts', async (c) => {
     const payload = c.get('jwtPayload');
-    return ok(c, await LegacyAuditLogEntity.listByUser(c.env, payload.userId));
+    return ok(c, await LegacyContactEntity.listByUser(c.env, payload.userId));
   });
-  /**
-   * Generates a PDF export for a specific journal.
-   */
+  app.post('/api/legacy-contacts', async (c) => {
+    const payload = c.get('jwtPayload');
+    const data = await c.req.json();
+    const contact = await LegacyContactEntity.create(c.env, {
+      ...LegacyContactEntity.initialState,
+      ...data,
+      id: crypto.randomUUID(),
+      userId: payload.userId
+    });
+    return ok(c, contact);
+  });
+  app.delete('/api/legacy-contacts/:id', async (c) => {
+    const id = c.req.param('id');
+    await LegacyContactEntity.delete(c.env, id);
+    return ok(c, { id });
+  });
+  app.get('/api/notifications', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await NotificationEntity.listByUser(c.env, payload.userId));
+  });
+  app.patch('/api/notifications/:id/read', async (c) => {
+    const id = c.req.param('id');
+    await new NotificationEntity(c.env, id).patch({ isRead: true });
+    return ok(c, { id });
+  });
+  app.post('/api/notifications/read-all', async (c) => {
+    const payload = c.get('jwtPayload');
+    await NotificationEntity.markAllAsRead(c.env, payload.userId);
+    return ok(c, { success: true });
+  });
+  app.get('/api/ai/insights/history', async (c) => {
+    const payload = c.get('jwtPayload');
+    return ok(c, await AiInsightEntity.listByUser(c.env, payload.userId));
+  });
+  app.get('/api/ai/insights/patterns', async (c) => {
+    const payload = c.get('jwtPayload');
+    const journalId = c.req.query('journalId');
+    const range = (c.req.query('range') || 'week') as AnalysisRange;
+    if (!journalId) return bad(c, 'journalId required');
+    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
+    const journal = await new JournalEntity(c.env, journalId).getState();
+    const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
+    const analysis = await analyzeJournalPatterns(userAuth!.profile.name, journal.title, entries, range);
+    const insight = await AiInsightEntity.create(c.env, {
+      ...analysis,
+      id: crypto.randomUUID(),
+      userId: payload.userId,
+      journalId,
+      range,
+      createdAt: new Date().toISOString()
+    });
+    return ok(c, insight);
+  });
+  app.post('/api/ai/chat', async (c) => {
+    const payload = c.get('jwtPayload');
+    const { message, history } = await c.req.json();
+    const userAuth = await UserAuthEntity.findByEmail(c.env, payload.email);
+    const entries = await EntryEntity.listByUser(c.env, payload.userId);
+    const response = await chatWithAssistant(userAuth!.profile.name, message, history, entries);
+    return c.text(response);
+  });
+  app.get('/api/activity/stream', async (c) => {
+    const payload = c.get('jwtPayload');
+    const [exports, audits, security] = await Promise.all([
+      ExportLogEntity.listByUser(c.env, payload.userId),
+      LegacyAuditLogEntity.listByUser(c.env, payload.userId),
+      SecurityLogEntity.listByUser(c.env, payload.userId)
+    ]);
+    const stream = [
+      ...exports.map(e => ({ id: e.id, type: 'export' as const, title: 'Archive Exported', message: `Journal archive downloaded as ${e.format}.`, timestamp: e.timestamp })),
+      ...audits.map(a => ({ id: a.id, type: 'transmission' as const, title: 'Legacy Transmission', message: `${a.recipientEmail} performed ${a.action}.`, timestamp: a.timestamp })),
+      ...security.map(s => ({ id: s.id, type: 'security' as const, title: 'Security Event', message: s.event, timestamp: s.timestamp }))
+    ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    return ok(c, stream);
+  });
+  app.post('/api/legacy/generate-link', async (c) => {
+    const payload = c.get('jwtPayload');
+    const data = await c.req.json();
+    const share = await LegacyShareEntity.create(c.env, {
+      id: crypto.randomUUID(),
+      userId: payload.userId,
+      journalId: data.journalId,
+      recipientEmail: data.recipientEmail,
+      accessKey: crypto.randomUUID(),
+      permissions: data.permissions,
+      passwordHash: data.password ? await hashPassword(data.password, "static-legacy-salt") : undefined,
+      passwordHint: data.passwordHint,
+      viewCount: 0,
+      createdAt: new Date().toISOString()
+    });
+    return ok(c, share);
+  });
   app.get('/api/export/pdf', async (c) => {
     const payload = c.get('jwtPayload');
     const journalId = c.req.query('journalId') || "";
@@ -220,15 +271,9 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const journal = await new JournalEntity(c.env, journalId).getState();
     const entries = await EntryEntity.listByJournal(c.env, journalId, payload.userId);
     const pdfBytes = await generateServerPdf(journal, entries, options);
-    // Log the export event
     await ExportLogEntity.create(c.env, {
-      id: crypto.randomUUID(),
-      userId: payload.userId,
-      journalId,
-      timestamp: new Date().toISOString(),
-      format: 'pdf',
-      status: 'success',
-      options
+      id: crypto.randomUUID(), userId: payload.userId, journalId,
+      timestamp: new Date().toISOString(), format: 'pdf', status: 'success', options
     });
     return new Response(pdfBytes, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="archive.pdf"' } });
   });
