@@ -1,149 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { BrainCircuit, Sparkles, TrendingUp, Zap, Loader2, History } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
-import { PatternAnalysisCard } from '@/components/PatternAnalysisCard';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { format } from 'date-fns';
-import { AnimatePresence } from "framer-motion";
-import type { AiInsight, AnalysisRange } from '@shared/types';
+import { BrainCircuit, Sparkles, TrendingUp, Zap } from 'lucide-react';
 export function Insights() {
   const insightData = useAppStore((s) => s.insightData);
-  const journals = useAppStore((s) => s.journals);
-  const journalInsights = useAppStore((s) => s.journalInsights);
-  const fetchInsights = useAppStore((s) => s.fetchInsights);
-  const fetchJournalPatterns = useAppStore((s) => s.fetchJournalPatterns);
-  const isSaving = useAppStore((s) => s.isSaving);
-  const [selectedJournal, setSelectedJournal] = useState<string>('');
-  const [selectedRange, setSelectedRange] = useState<AnalysisRange>('week');
-  const [currentAnalysis, setCurrentAnalysis] = useState<AiInsight | null>(null);
-  const hasInsights = !!insightData;
-  
-  useEffect(() => {
-    if (!hasInsights) {
-      fetchInsights();
-    }
-  }, [hasInsights, fetchInsights]);
-  const handleGenerateAnalysis = async () => {
-    if (!selectedJournal) return;
-    const insight = await fetchJournalPatterns(selectedJournal, selectedRange);
-    setCurrentAnalysis(insight);
-  };
-  const relevantHistory = journalInsights.filter(i => i.journalId === selectedJournal);
-  if (!insightData) {
-    return (
-      <AppLayout container>
-        <div className="flex items-center justify-center h-64 py-20">
-          <Loader2 className="animate-spin mr-2 h-8 w-8 text-amber-600" />
-          <span className="text-lg text-stone-500 font-serif italic">Synchronizing insights...</span>
-        </div>
-      </AppLayout>
-    );
-  }
   return (
     <AppLayout container>
-      <div className="space-y-16 pb-32 max-w-7xl mx-auto">
-        <header className="space-y-4">
-          <div className="flex items-center gap-2 text-amber-600">
+      <div className="space-y-12 pb-20">
+        <header>
+          <div className="flex items-center gap-2 text-amber-600 mb-2">
             <BrainCircuit size={20} />
-            <span className="text-xs font-bold uppercase tracking-[0.2em]">Intelligence Engine</span>
+            <span className="text-xs font-bold uppercase tracking-[0.2em]">AI Intelligence Layer</span>
           </div>
-          <div className="space-y-2">
-            <h1 className="text-4xl md:text-5xl font-serif font-medium text-stone-900 dark:text-stone-50 tracking-tight">Discovery Hub</h1>
-            <p className="text-stone-500 font-light max-w-2xl leading-relaxed">
-              Lumina deciphers the subtle threads of your narrative to illuminate your path forward.
-            </p>
-          </div>
+          <h1 className="text-4xl font-serif font-medium text-stone-900 dark:text-stone-50">Self-Discovery Insights</h1>
+          <p className="text-stone-500 mt-2 font-light max-w-2xl">
+            Lumina analyzes your writing patterns and emotional landscape to help you understand your growth over time.
+          </p>
         </header>
-        <section className="bg-stone-50 rounded-4xl p-8 md:p-12 border border-stone-100 shadow-inner">
-          <div className="flex flex-col md:flex-row items-end gap-6 mb-12">
-            <div className="flex-1 space-y-3 w-full">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 ml-1">Select Sanctuary</label>
-              <Select value={selectedJournal} onValueChange={setSelectedJournal}>
-                <SelectTrigger className="rounded-2xl h-14 bg-white border-stone-200 shadow-sm text-lg font-serif">
-                  <SelectValue placeholder="Which archive shall we analyze?" />
-                </SelectTrigger>
-                <SelectContent className="rounded-2xl">
-                  {journals.map(j => (
-                    <SelectItem key={j.id} value={j.id} className="font-serif">{j.title}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-full md:w-48 space-y-3">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 ml-1">Time Horizon</label>
-              <Select value={selectedRange} onValueChange={(val: AnalysisRange) => setSelectedRange(val)}>
-                <SelectTrigger className="rounded-2xl h-14 bg-white border-stone-200 shadow-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="rounded-2xl">
-                  <SelectItem value="week">Past Week</SelectItem>
-                  <SelectItem value="month">Past Month</SelectItem>
-                  <SelectItem value="year">Past Year</SelectItem>
-                  <SelectItem value="all">Full Archive</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              onClick={handleGenerateAnalysis}
-              disabled={!selectedJournal || isSaving}
-              className="w-full md:w-auto h-14 px-8 rounded-2xl bg-stone-900 text-white shadow-xl hover:scale-105 transition-all gap-2"
-            >
-              {isSaving ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />} Generate Analysis
-            </Button>
-          </div>
-          <AnimatePresence mode="wait">
-            {currentAnalysis ? (
-              <PatternAnalysisCard key={currentAnalysis.id} insight={currentAnalysis} />
-            ) : (
-              <div className="py-20 text-center space-y-4 opacity-20">
-                <BrainCircuit size={64} className="mx-auto" />
-                <p className="font-serif italic text-xl">Select an archive to begin the deeper reflection.</p>
-              </div>
-            )}
-          </AnimatePresence>
-          {relevantHistory.length > 0 && (
-            <div className="mt-12 pt-12 border-t border-stone-100">
-              <div className="flex items-center gap-2 text-stone-400 mb-6">
-                <History size={16} />
-                <h3 className="text-xs font-bold uppercase tracking-widest">Analysis Archive</h3>
-              </div>
-              <Accordion type="single" collapsible className="space-y-2">
-                {relevantHistory.slice(0, 5).map((h) => (
-                  <AccordionItem key={h.id} value={h.id} className="border-none bg-white rounded-2xl px-6">
-                    <AccordionTrigger className="hover:no-underline">
-                      <div className="flex items-center gap-4 text-left">
-                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">{h.range} Analysis</span>
-                        <span className="text-sm font-serif">{format(new Date(h.createdAt), 'MMMM dd, yyyy')}</span>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="pb-6">
-                      <div className="text-sm text-stone-600 leading-relaxed font-serif whitespace-pre-wrap">
-                        {h.content.substring(0, 300)}...
-                      </div>
-                      <Button variant="link" onClick={() => setCurrentAnalysis(h)} className="mt-4 p-0 h-auto text-stone-900">View Full Analysis</Button>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            </div>
-          )}
-        </section>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <Card className="lg:col-span-2 rounded-4xl border-stone-100 dark:border-stone-800 shadow-sm overflow-hidden bg-white">
-            <CardHeader className="p-8 pb-2">
-              <CardTitle className="text-xl font-serif flex items-center gap-2">
-                <TrendingUp size={20} className="text-stone-400" /> Global Mood Landscape
+          <Card className="lg:col-span-2 rounded-3xl border-stone-100 dark:border-stone-800 shadow-sm overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-serif flex items-center gap-2">
+                <TrendingUp size={18} className="text-stone-400" /> Mood Landscape
               </CardTitle>
-              <CardDescription>Mapping your collective resonance across all sanctuaries.</CardDescription>
             </CardHeader>
-            <CardContent className="h-[350px] w-full p-8 pt-4">
+            <CardContent className="h-[300px] w-full pt-4">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={insightData.moodTrends || []}>
+                <AreaChart data={insightData.moodTrends}>
                   <defs>
                     <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#d97706" stopOpacity={0.1}/>
@@ -153,36 +38,63 @@ export function Insights() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e7e5e4" />
                   <XAxis dataKey="date" stroke="#a8a29e" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis hide domain={[0, 6]} />
-                  <Tooltip
+                  <Tooltip 
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
                   />
-                  <Area type="monotone" dataKey="score" stroke="#d97706" strokeWidth={3} fillOpacity={1} fill="url(#colorScore)" />
+                  <Area type="monotone" dataKey="score" stroke="#d97706" strokeWidth={2} fillOpacity={1} fill="url(#colorScore)" />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
-          <Card className="rounded-4xl border-stone-100 dark:border-stone-800 shadow-sm bg-white">
-            <CardHeader className="p-8">
-              <CardTitle className="text-xl font-serif flex items-center gap-2">
-                <Zap size={20} className="text-stone-400" /> Writing Rhythm
+          <Card className="rounded-3xl border-stone-100 dark:border-stone-800 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg font-serif flex items-center gap-2">
+                <Zap size={18} className="text-stone-400" /> Writing Rhythm
               </CardTitle>
             </CardHeader>
-            <CardContent className="h-[350px] w-full p-8 pt-4">
+            <CardContent className="h-[300px] w-full pt-4">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={insightData.writingFrequency || []}>
+                <BarChart data={insightData.writingFrequency}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e7e5e4" />
                   <XAxis dataKey="day" stroke="#a8a29e" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis hide />
-                  <Tooltip
+                  <Tooltip 
                     cursor={{ fill: '#f5f5f4' }}
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
                   />
-                  <Bar dataKey="count" fill="#1c1917" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="count" fill="#1c1917" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
         </div>
+        <section className="space-y-6">
+          <h2 className="text-2xl font-serif font-medium flex items-center gap-2">
+            <Sparkles size={22} className="text-amber-500" /> Emerging Themes
+          </h2>
+          <div className="flex flex-wrap gap-4">
+            {insightData.topTopics.map((topic) => (
+              <div 
+                key={topic.text}
+                className="px-6 py-4 rounded-2xl bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 shadow-sm flex flex-col items-center justify-center min-w-[120px]"
+              >
+                <span className="text-2xl font-serif font-medium text-stone-900 dark:text-stone-100">{topic.value}%</span>
+                <span className="text-xs text-stone-500 uppercase tracking-widest mt-1">{topic.text}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+        <Card className="rounded-3xl bg-stone-900 text-white p-8 border-none overflow-hidden relative">
+          <div className="relative z-10 space-y-4">
+            <h3 className="text-2xl font-serif">Lumina's Perspective</h3>
+            <p className="text-stone-400 font-light text-lg leading-relaxed max-w-2xl">
+              "You've been writing consistently for the past 12 days. Your mood patterns show a significant increase in 'Inspired' states following your 'Fitness' journal entries. Perhaps consider moving your morning reflection to after your workout?"
+            </p>
+          </div>
+          <div className="absolute top-0 right-0 p-8 opacity-10">
+            <BrainCircuit size={180} />
+          </div>
+        </Card>
       </div>
     </AppLayout>
   );

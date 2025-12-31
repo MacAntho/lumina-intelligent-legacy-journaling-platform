@@ -14,6 +14,8 @@ import '@/index.css'
 import { HomePage } from '@/pages/HomePage'
 import { Dashboard } from '@/pages/Dashboard'
 import { JournalDetail } from '@/pages/JournalDetail'
+import { Insights } from '@/pages/Insights'
+import { LegacySettings } from '@/pages/LegacySettings'
 const queryClient = new QueryClient();
 const router = createBrowserRouter([
   {
@@ -29,6 +31,16 @@ const router = createBrowserRouter([
   {
     path: "/journal/:id",
     element: <JournalDetail />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/insights",
+    element: <Insights />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/legacy",
+    element: <LegacySettings />,
     errorElement: <RouteErrorBoundary />,
   }
 ]);

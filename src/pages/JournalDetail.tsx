@@ -1,18 +1,20 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ChevronLeft, Send, Sparkles, Trash2, Calendar } from 'lucide-react';
+import { ChevronLeft, Send, Sparkles, Trash2, Calendar, BookText } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 export function JournalDetail() {
   const { id } = useParams();
-  const journal = useAppStore((s) => s.journals.find(j => j.id === id));
-  const entries = useAppStore((s) => s.entries.filter(e => e.journalId === id));
+  const journals = useAppStore((s) => s.journals);
+  const entries = useAppStore((s) => s.entries);
   const addEntry = useAppStore((s) => s.addEntry);
   const deleteEntry = useAppStore((s) => s.deleteEntry);
+  const journal = journals.find(j => j.id === id);
+  const journalEntries = entries.filter(e => e.journalId === id);
   const [content, setContent] = useState('');
   const handleSave = () => {
     if (!content.trim() || !id) return;
@@ -24,7 +26,7 @@ export function JournalDetail() {
     });
     setContent('');
   };
-  if (!journal) return <div>Journal not found</div>;
+  if (!journal) return <div className="p-20 text-center">Journal not found</div>;
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto px-6 py-12">
@@ -46,15 +48,14 @@ export function JournalDetail() {
             </div>
           </div>
         </header>
-        <div className="grid grid-cols-1 lg:grid-cols-1 gap-12">
-          {/* Editor Section */}
-          <section className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-8 shadow-sm">
+        <div className="grid grid-cols-1 gap-12">
+          <section className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-8 shadow-sm transition-all focus-within:shadow-md focus-within:border-stone-400">
             <div className="flex items-center gap-2 mb-4 text-xs font-medium text-stone-400 uppercase tracking-widest">
-              <Sparkles size={14} /> Intelligence Enabled
+              <Sparkles size={14} className="text-amber-500" /> Intelligence Enabled
             </div>
             <Textarea
               placeholder="What's on your mind? The paper is yours..."
-              className="min-h-[200px] border-none focus-visible:ring-0 text-lg font-serif resize-none p-0 placeholder:text-stone-300 dark:placeholder:text-stone-700 bg-transparent"
+              className="min-h-[200px] border-none focus-visible:ring-0 text-lg font-serif resize-none p-0 placeholder:text-stone-300 dark:placeholder:text-stone-700 bg-transparent leading-relaxed"
               value={content}
               onChange={(e) => setContent(e.target.value)}
             />
@@ -63,28 +64,27 @@ export function JournalDetail() {
                 <button className="text-xs font-medium text-stone-400 hover:text-stone-600">Add Image</button>
                 <button className="text-xs font-medium text-stone-400 hover:text-stone-600">Add Tags</button>
               </div>
-              <Button 
-                onClick={handleSave} 
-                disabled={!content.trim()} 
-                className="rounded-full bg-stone-900 text-white px-8"
+              <Button
+                onClick={handleSave}
+                disabled={!content.trim()}
+                className="rounded-full bg-stone-900 text-white px-8 transition-all hover:scale-105 active:scale-95"
               >
                 Save Entry <Send size={16} className="ml-2" />
               </Button>
             </div>
           </section>
-          {/* Timeline Section */}
           <section className="space-y-8">
             <h2 className="text-xl font-medium text-stone-900 dark:text-stone-100 flex items-center gap-2">
-              Past Entries <span className="text-sm font-normal text-stone-400">({entries.length})</span>
+              Past Entries <span className="text-sm font-normal text-stone-400">({journalEntries.length})</span>
             </h2>
             <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-stone-200 before:via-stone-100 before:to-transparent dark:before:from-stone-800 dark:before:via-stone-900">
               <AnimatePresence mode="popLayout">
-                {entries.length === 0 ? (
+                {journalEntries.length === 0 ? (
                   <div className="ml-12 py-12 text-stone-400 italic font-light">
                     No entries yet. Start your journey above.
                   </div>
                 ) : (
-                  entries.map((entry) => (
+                  journalEntries.map((entry) => (
                     <motion.div
                       key={entry.id}
                       initial={{ opacity: 0, x: -10 }}
@@ -98,13 +98,13 @@ export function JournalDetail() {
                       <div className="bg-stone-50 dark:bg-stone-900/50 border border-stone-100 dark:border-stone-800 rounded-2xl p-6 hover:shadow-md transition-all group">
                         <div className="flex items-center justify-between mb-4">
                           <time className="text-xs font-medium text-stone-400">
-                            {format(new Date(entry.date), 'EEEE, MMMM dd, yyyy')} • {format(new Date(entry.date), 'HH:mm')}
+                            {format(new Date(entry.date), 'EEEE, MMMM dd, yyyy')} ��� {format(new Date(entry.date), 'HH:mm')}
                           </time>
                           <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-stone-200 dark:bg-stone-800 text-stone-600 font-bold uppercase tracking-wider">
                               {entry.mood}
                             </span>
-                            <button 
+                            <button
                               onClick={() => deleteEntry(entry.id)}
                               className="text-stone-300 hover:text-red-500 transition-colors"
                             >
