@@ -6,7 +6,8 @@ import {
   UserAuthEntity, JournalEntity, EntryEntity,
   LegacyContactEntity, LegacyShareEntity, ExportLogEntity,
   LegacyAuditLogEntity, NotificationEntity,
-  SavedSearchEntity, PromptEntity
+  SavedSearchEntity, PromptEntity,
+  AiInsightEntity
 } from "./entities";
 import { chatWithAssistant, analyzeJournalPatterns } from "./intelligence";
 import { ok, bad, notFound } from './core-utils';

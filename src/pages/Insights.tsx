@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { PatternAnalysisCard } from '@/components/PatternAnalysisCard';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { format } from 'date-fns';
+import { format } from 'date-fns';import { AnimatePresence } from "framer-motion";
 export function Insights() {
   const insightData = useAppStore((s) => s.insightData);
   const journals = useAppStore((s) => s.journals);

@@ -1,5 +1,5 @@
 import { IndexedEntity, Env } from "./core-utils";
-import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog, LegacyAuditLog, AppNotification, SavedSearch, DailyContent } from "@shared/types";
+import type { User, Journal, Entry, LegacyContact, LegacyShare, ExportLog, LegacyAuditLog, AppNotification, SavedSearch, DailyContent, AiInsight } from "@shared/types";
 export interface UserAuthData {
   id: string; // email
   passwordHash: string;
@@ -55,6 +55,7 @@ export class UserAuthEntity extends IndexedEntity<UserAuthData> {
     await NotificationEntity.deleteManyByUser(env, userId);
     await SavedSearchEntity.deleteManyByUser(env, userId);
     await PromptEntity.deleteManyByUser(env, userId);
+    await AiInsightEntity.deleteManyByUser(env, userId);
     await UserAuthEntity.delete(env, email.toLowerCase());
   }
 }
@@ -149,6 +150,32 @@ export class EntryEntity extends IndexedEntity<Entry> {
     const titles = Array.from(new Set(entries.map(e => e.title).filter((t): t is string => !!t)));
     const tags = Array.from(new Set(entries.flatMap(e => e.tags || [])));
     return { titles, tags };
+  }
+}
+export class AiInsightEntity extends IndexedEntity<AiInsight> {
+  static readonly entityName = "ai-insight";
+  static readonly indexName = "ai-insights";
+  static readonly initialState: AiInsight = {
+    id: "",
+    userId: "",
+    journalId: "",
+    range: "week",
+    content: "",
+    moodScore: 3,
+    topThemes: [],
+    goalsIdentified: [],
+    growthIndicators: [],
+    createdAt: ""
+  };
+  static async listByUser(env: Env, userId: string): Promise<AiInsight[]> {
+    const { items } = await this.list(env, null, 100);
+    return items
+      .filter(i => i.userId === userId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+  static async deleteManyByUser(env: Env, userId: string) {
+    const items = await this.listByUser(env, userId);
+    if (items.length > 0) await this.deleteMany(env, items.map(i => i.id));
   }
 }
 export class LegacyContactEntity extends IndexedEntity<LegacyContact> {
