@@ -27,6 +27,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const salt = crypto.randomUUID();
     const hash = await hashPassword(body.password, salt);
     const userId = crypto.randomUUID();
+    const now = new Date().toISOString();
     const userAuth = await UserAuthEntity.create(c.env, {
       id: body.email.toLowerCase(),
       passwordHash: hash,
@@ -39,13 +40,14 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
           theme: 'system',
           notificationsEnabled: true,
           language: 'en',
+          onboardingCompleted: false,
           notificationSettings: {
             entry: true, prompt: true, affirmation: true, share: true, access: true, insight: true, export: true, reminder: true, limit: true, activity: true
           },
           quietHours: { start: "22:00", end: "08:00", enabled: false }
         },
-        createdAt: new Date().toISOString(),
-        lastHeartbeatAt: new Date().toISOString()
+        createdAt: now,
+        lastHeartbeatAt: now
       }
     });
     const token = await sign({ userId, email: userAuth.id, exp: Math.floor(Date.now() / 1000) + 86400 }, JWT_SECRET);
@@ -90,7 +92,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const audits = await LegacyAuditLogEntity.listByUser(c.env, userId);
     const exports = await ExportLogEntity.listByUser(c.env, userId);
     const journals = await JournalEntity.listByUser(c.env, userId);
-    const stream: any[] = [
+    const stream = [
       ...notes.map(n => ({ id: n.id, type: 'system' as const, title: n.title, message: n.message, timestamp: n.createdAt })),
       ...audits.map(a => ({ id: a.id, type: 'transmission' as const, title: 'Legacy Access', message: `Archive for "${journals.find(j => j.id === a.journalId)?.title || 'Journal'}" was ${a.action}ed by ${a.recipientEmail}`, timestamp: a.timestamp })),
       ...exports.map(e => ({ id: e.id, type: 'export' as const, title: 'Journal Export', message: `Exported to ${e.format.toUpperCase()} (${e.status})`, timestamp: e.timestamp }))

@@ -33,17 +33,14 @@ export function AdvancedSearch<T extends Record<string, any>>({
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({});
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  // Compute results. We use useMemo to prevent unnecessary calculations.
   const filteredItems = useMemo(() => {
     return items.filter(item => {
-      // 1. Text Search
       const searchStr = query.toLowerCase();
       const matchesText = !query || searchFields.some(field => {
         const val = item[field];
         return val && String(val).toLowerCase().includes(searchStr);
       });
       if (!matchesText) return false;
-      // 2. Metadata Filters (Contextual)
       if (context === 'journal') {
         if (filters.moods?.length && !filters.moods.includes(item.mood)) return false;
         if (filters.minStars && (item.structuredData?.mood_score || item.structuredData?.intensity || 0) < filters.minStars) return false;
@@ -68,13 +65,12 @@ export function AdvancedSearch<T extends Record<string, any>>({
       return true;
     });
   }, [items, query, filters, searchFields, context]);
-  // Stable result reporting.
   const resultSignature = useMemo(() => {
     return JSON.stringify(filteredItems.map(i => i.id).sort());
   }, [filteredItems]);
   useEffect(() => {
     onResults(filteredItems);
-  }, [resultSignature, onResults, filteredItems]);
+  }, [resultSignature, onResults]);
   const handleApplySaved = (saved: any) => {
     setQuery(saved.query);
     setFilters(saved.filters);

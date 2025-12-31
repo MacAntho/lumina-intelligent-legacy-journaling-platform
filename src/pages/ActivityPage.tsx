@@ -79,9 +79,9 @@ export function ActivityPage() {
             <div className="space-y-8">
               <AnimatePresence initial={false}>
                 {filteredActivities.length === 0 ? (
-                  <motion.div 
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
                     className="py-20 text-center border-2 border-dashed border-stone-100 rounded-4xl flex flex-col items-center gap-4"
                   >
                     <div className="h-16 w-16 rounded-full bg-stone-50 flex items-center justify-center text-stone-300">
@@ -128,15 +128,6 @@ export function ActivityPage() {
                               </span>
                             </div>
                           </div>
-                          {activity.metadata && Object.keys(activity.metadata).length > 0 && (
-                            <div className="mt-4 pt-4 border-t border-stone-100/50 flex flex-wrap gap-2">
-                              {Object.entries(activity.metadata).map(([k, v]) => (
-                                <div key={k} className="px-2 py-0.5 rounded-md bg-stone-100/50 text-[9px] text-stone-500 border border-stone-200/50">
-                                  <span className="font-bold uppercase opacity-60 mr-1">{k}:</span> {String(v)}
-                                </div>
-                              ))}
-                            </div>
-                          )}
                         </CardContent>
                       </Card>
                     </motion.div>
