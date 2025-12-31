@@ -12,6 +12,7 @@ interface AppState {
   insightData: InsightData | null;
   isLoading: boolean;
   isSaving: boolean;
+  isInitialized: boolean;
   initialize: () => Promise<void>;
   login: (req: LoginRequest) => Promise<void>;
   register: (req: RegisterRequest) => Promise<void>;
@@ -35,20 +36,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   insightData: null,
   isLoading: false,
   isSaving: false,
+  isInitialized: false,
   initialize: async () => {
-    const token = get().token;
-    if (!token) return;
+    const { token, isLoading, isInitialized } = get();
+    if (!token || isLoading || isInitialized) return;
     set({ isLoading: true });
     try {
       const user = await api<User>('/api/auth/me');
       const journals = await api<Journal[]>('/api/journals');
       const contacts = await api<LegacyContact[]>('/api/legacy-contacts');
-      set({ user, journals, legacyContacts: contacts, isAuthenticated: true, isLoading: false });
+      set({ 
+        user, 
+        journals, 
+        legacyContacts: contacts, 
+        isAuthenticated: true, 
+        isLoading: false,
+        isInitialized: true 
+      });
       get().fetchInsights();
     } catch (error) {
       console.error('Initialization failed:', error);
       get().logout();
-      set({ isLoading: false });
+      set({ isLoading: false, isInitialized: false });
     }
   },
   login: async (req) => {
@@ -59,8 +68,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         body: JSON.stringify(req)
       });
       localStorage.setItem('lumina_token', res.token);
-      set({ user: res.user, token: res.token, isAuthenticated: true, isLoading: false });
-      get().initialize();
+      set({ 
+        user: res.user, 
+        token: res.token, 
+        isAuthenticated: true, 
+        isLoading: false,
+        isInitialized: true 
+      });
       toast.success('Welcome back to Lumina');
     } catch (error) {
       console.error('Login failed:', error);
@@ -77,8 +91,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         body: JSON.stringify(req)
       });
       localStorage.setItem('lumina_token', res.token);
-      set({ user: res.user, token: res.token, isAuthenticated: true, isLoading: false });
-      get().initialize();
+      set({ 
+        user: res.user, 
+        token: res.token, 
+        isAuthenticated: true, 
+        isLoading: false,
+        isInitialized: true 
+      });
       toast.success('Sanctuary created');
     } catch (error) {
       console.error('Registration failed:', error);
@@ -89,7 +108,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   logout: () => {
     localStorage.removeItem('lumina_token');
-    set({ user: null, token: null, isAuthenticated: false, journals: [], entries: [], legacyContacts: [], insightData: null });
+    set({ 
+      user: null, 
+      token: null, 
+      isAuthenticated: false, 
+      journals: [], 
+      entries: [], 
+      legacyContacts: [], 
+      insightData: null,
+      isInitialized: false 
+    });
   },
   updateProfile: async (profile) => {
     set({ isSaving: true });

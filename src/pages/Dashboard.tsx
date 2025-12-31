@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAppStore } from '@/lib/store';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -24,29 +24,27 @@ export function Dashboard() {
   const user = useAppStore((s) => s.user);
   const addJournal = useAppStore((s) => s.addJournal);
   const deleteJournal = useAppStore((s) => s.deleteJournal);
-  const initialize = useAppStore((s) => s.initialize);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [newJournal, setNewJournal] = useState<NewJournalState>({ 
-    title: '', 
-    description: '', 
-    type: 'reflective' 
+  const [newJournal, setNewJournal] = useState<NewJournalState>({
+    title: '',
+    description: '',
+    type: 'reflective'
   });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    initialize();
-  }, []);
   const handleCreate = async () => {
     if (!newJournal.title) return;
     await addJournal(newJournal);
     setNewJournal({ title: '', description: '', type: 'reflective' });
     setIsCreateOpen(false);
   };
+  const firstName = user?.name?.split(' ')[0] ?? 'Explorer';
   return (
     <AppLayout container>
       <div className="space-y-10">
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-serif font-medium text-stone-900 dark:text-stone-50">Welcome, {user?.name?.split(' ')[0]}</h1>
+            <h1 className="text-4xl font-serif font-medium text-stone-900 dark:text-stone-50">
+              Welcome, {firstName}
+            </h1>
             <p className="text-stone-500 mt-1 font-light">Your reflections are waiting for you.</p>
           </div>
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -56,10 +54,12 @@ export function Dashboard() {
               </Button>
             </DialogTrigger>
             <DialogContent className="rounded-3xl sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle className="text-2xl font-serif">Create New Journal</DialogTitle>
-                  <DialogDescription className="text-sm text-stone-500 mt-2">Create a new journal to organize your reflections and legacy.</DialogDescription>
-                </DialogHeader>
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-serif">Create New Journal</DialogTitle>
+                <DialogDescription className="text-sm text-stone-500 mt-2">
+                  Create a new journal to organize your reflections and legacy.
+                </DialogDescription>
+              </DialogHeader>
               <div className="grid gap-6 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="title">Journal Title</Label>
