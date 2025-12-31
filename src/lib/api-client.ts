@@ -1,4 +1,4 @@
-import { ApiResponse } from "../../shared/types"
+import { ApiResponse } from "../../shared/types";
 interface ApiOptions extends RequestInit {
   silent?: boolean;
 }
@@ -14,30 +14,29 @@ export async function api<T>(path: string, options?: ApiOptions): Promise<T> {
     const res = await fetch(path, { ...init, headers });
     if (res.status === 401 && !silent) {
       localStorage.removeItem('lumina_token');
-      if (window.location.pathname !== '/' && window.location.pathname !== '/auth') {
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/' && currentPath !== '/auth' && !currentPath.startsWith('/shared/')) {
         window.location.href = '/auth';
       }
     }
     let json: ApiResponse<T>;
+    const text = await res.text();
     try {
-      json = (await res.json()) as ApiResponse<T>;
+      json = JSON.parse(text) as ApiResponse<T>;
     } catch (e) {
-      throw new Error(`Failed to parse response from ${init.method || 'GET'} ${path} (${res.status})`);
+      console.error(`[API PARSE ERROR] ${path}:`, text);
+      throw new Error(`Failed to decode sanctuary response: ${res.status}`);
     }
     if (!res.ok || !json.success) {
-      const errorMsg = json.error || `Request to ${path} failed with status ${res.status}`;
-      console.error(`[API ERROR] ${init.method || 'GET'} ${path}:`, errorMsg);
+      const errorMsg = json.error || `Sanctuary transmission error: ${res.status}`;
+      if (!silent) console.error(`[API ERROR] ${path}:`, errorMsg);
       throw new Error(errorMsg);
     }
-    if (json.data === undefined) {
-      // For void responses
-      return null as T;
-    }
-    return json.data;
+    return json.data as T;
   } catch (error) {
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error('An unexpected network error occurred');
+    throw new Error('Moat connection interrupted');
   }
 }

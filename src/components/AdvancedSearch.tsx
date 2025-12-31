@@ -9,6 +9,7 @@ import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { SearchFilters } from '@shared/types';
 import { format as dateFnsFormat } from 'date-fns';
+import { toast } from 'sonner';
 interface AdvancedSearchProps<T> {
   items: T[];
   onResults: (results: T[]) => void;
@@ -34,7 +35,6 @@ export function AdvancedSearch<T extends Record<string, any>>({
   const [filters, setFilters] = useState<SearchFilters>({});
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
-  // Debounced result calculation to avoid rapid updates during typing
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       const searchStr = query.toLowerCase();
@@ -45,7 +45,8 @@ export function AdvancedSearch<T extends Record<string, any>>({
       if (!matchesText) return false;
       if (context === 'journal') {
         if (filters.moods?.length && !filters.moods.includes(item.mood)) return false;
-        if (filters.minStars && (item.structuredData?.mood_score || item.structuredData?.intensity || 0) < filters.minStars) return false;
+        const score = item.structuredData?.mood_score || item.structuredData?.intensity || 0;
+        if (filters.minStars && score < filters.minStars) return false;
         if (filters.hasImages && (!item.images || item.images.length === 0)) return false;
         if (filters.minWordCount && (item.wordCount || 0) < filters.minWordCount) return false;
         if (filters.tags?.length && !filters.tags.some((t: string) => item.tags?.includes(t))) return false;
@@ -67,7 +68,6 @@ export function AdvancedSearch<T extends Record<string, any>>({
       return true;
     });
   }, [items, query, filters, searchFields, context]);
-  // Sync results back to parent with stability
   useEffect(() => {
     setIsRefining(true);
     const timer = setTimeout(() => {
@@ -115,7 +115,7 @@ export function AdvancedSearch<T extends Record<string, any>>({
             placeholder={placeholder}
             className="pl-11 pr-4 py-6 rounded-2xl border-stone-200 bg-white/50 backdrop-blur-sm focus-visible:ring-stone-200 text-lg font-serif"
           />
-          <AnimatePresence shadow-xl>
+          <AnimatePresence>
             {isDropdownOpen && (recentSearches.length > 0 || savedSearches.length > 0 || suggestions.length > 0) && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
@@ -125,42 +125,21 @@ export function AdvancedSearch<T extends Record<string, any>>({
               >
                 {suggestions.length > 0 && (
                   <div className="p-3 border-b border-stone-50">
-                    <p className="px-3 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Suggestions</p>
                     {suggestions.map((s, idx) => (
-                      <button key={idx} onClick={() => setQuery(s.text)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-stone-50 text-sm transition-all hover:translate-x-1">
+                      <button key={idx} onClick={() => setQuery(s.text)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-stone-50 text-sm">
                         <Sparkles size={14} className="text-amber-400" />
                         <span className="flex-1 text-left font-serif">{s.text}</span>
-                        <span className="text-[10px] text-stone-300 italic">{s.type}</span>
                       </button>
                     ))}
                   </div>
                 )}
-                {savedSearches.length > 0 && (
-                  <div className="p-3 border-b border-stone-50">
-                    <p className="px-3 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Saved Filters</p>
-                    <div className="flex flex-wrap gap-2 px-3 py-2">
-                      {savedSearches.map(s => (
-                        <button 
-                          key={s.id} 
-                          onClick={() => handleApplySaved(s)} 
-                          className="px-3 py-1.5 rounded-full bg-stone-50 border border-stone-100 text-xs text-stone-600 hover:bg-stone-900 hover:text-white transition-all"
-                        >
-                          {s.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 {recentSearches.length > 0 && (
                   <div className="p-3">
-                    <div className="flex items-center justify-between px-3 py-1">
-                      <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Recent Activity</p>
-                      <button onClick={clearRecentSearches} className="text-[10px] text-stone-300 hover:text-stone-600">Clear</button>
-                    </div>
+                    <p className="px-3 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Recent Activity</p>
                     {recentSearches.map(q => (
-                      <button key={q} onClick={() => setQuery(q)} className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl hover:bg-stone-50 text-sm transition-colors">
+                      <button key={q} onClick={() => setQuery(q)} className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl hover:bg-stone-50 text-sm">
                         <History size={14} className="text-stone-300" />
-                        <span className="flex-1 text-left text-stone-600 font-light">{q}</span>
+                        <span className="flex-1 text-left text-stone-600">{q}</span>
                       </button>
                     ))}
                   </div>
@@ -187,15 +166,13 @@ export function AdvancedSearch<T extends Record<string, any>>({
           >
             <div className="bg-stone-50 border border-stone-200 rounded-4xl p-8 grid grid-cols-1 md:grid-cols-3 gap-10">
               <div className="space-y-4">
-                <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
-                  <Sparkles size={12} /> Emotional Filters
-                </Label>
+                <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Emotional Filters</Label>
                 <div className="flex flex-wrap gap-2">
-                  {['High', 'Inspired', 'Normal', 'Tired', 'Low'].map(m => (
+                  {['Inspired', 'Normal', 'Low'].map(m => (
                     <Badge
                       key={m}
                       variant={filters.moods?.includes(m) ? 'default' : 'outline'}
-                      className="cursor-pointer rounded-full px-3 py-1 text-[10px] h-7 border-stone-200"
+                      className="cursor-pointer rounded-full"
                       onClick={() => setFilters(f => ({ ...f, moods: f.moods?.includes(m) ? f.moods.filter(x => x !== m) : [...(f.moods || []), m] }))}
                     >
                       {m}
@@ -203,31 +180,9 @@ export function AdvancedSearch<T extends Record<string, any>>({
                   ))}
                 </div>
               </div>
-              <div className="space-y-4">
-                <Label className="text-[10px] uppercase font-bold tracking-widest text-stone-400 flex items-center gap-2">
-                  <Calendar size={12} /> Archive Window
-                </Label>
-                <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    type="date"
-                    className="h-9 text-[10px] rounded-xl border-stone-200 bg-white"
-                    value={filters.dateRange?.start || ''}
-                    onChange={(e) => setFilters(f => ({ ...f, dateRange: { ...(f.dateRange || { start: '', end: '' }), start: e.target.value } }))}
-                  />
-                  <Input
-                    type="date"
-                    className="h-9 text-[10px] rounded-xl border-stone-200 bg-white"
-                    value={filters.dateRange?.end || ''}
-                    onChange={(e) => setFilters(f => ({ ...f, dateRange: { ...(f.dateRange || { start: '', end: '' }), end: e.target.value } }))}
-                  />
-                </div>
-              </div>
               <div className="flex flex-col justify-end gap-3">
-                <Button onClick={handleSaveCurrent} className="rounded-xl h-10 text-xs gap-2 bg-stone-900 text-white hover:bg-stone-800">
+                <Button onClick={handleSaveCurrent} className="rounded-xl h-10 text-xs gap-2 bg-stone-900 text-white">
                   <Bookmark size={14} /> Save Filter Pattern
-                </Button>
-                <Button variant="ghost" onClick={() => setFilters({})} className="h-10 text-[10px] uppercase font-bold text-stone-400 hover:text-stone-900">
-                  Reset Parameters
                 </Button>
               </div>
             </div>
